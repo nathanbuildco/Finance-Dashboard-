@@ -411,7 +411,6 @@ export default function Dashboard() {
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
             <ResponsiveContainer width="100%" height={380}>
               <ComposedChart data={overviewData} margin={{ top: 32, right: 20, left: 10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
                 <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 11, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
                 <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
@@ -430,7 +429,6 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height={320}>
               <AreaChart data={cumData} margin={{ top: 28, right: 20, left: 10, bottom: 0 }}>
                 <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.blue} stopOpacity={0.3} /><stop offset="95%" stopColor={C.blue} stopOpacity={0} /></linearGradient></defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
                 <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 11, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
                 <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
