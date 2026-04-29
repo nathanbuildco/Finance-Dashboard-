@@ -354,6 +354,8 @@ export default function Dashboard() {
       {/* HEADER */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28, flexWrap: "wrap", gap: 16 }}>
         <div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/tbc-logo.svg" alt="The Building Company" style={{ height: 40, width: "auto", display: "block", marginBottom: 14 }} />
           <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: C.blue, marginBottom: 4, fontWeight: 600 }}>Finance Review — Live</div>
           <h1 style={{ fontSize: 26, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>Forward Projections Dashboard</h1>
           <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
