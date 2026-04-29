@@ -176,7 +176,7 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 
 function KPI({ label, value, sub, color, good }: { label: string; value: string; sub?: string; color?: string; good?: boolean }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "22px 24px", flex: 1, minWidth: 190, textAlign: "center" }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: `1px solid ${C.blue}`, borderRadius: 12, padding: "22px 24px", flex: 1, minWidth: 190, textAlign: "center", boxShadow: `inset 0 1px 0 ${C.blue}33` }}>
       <div style={{ fontSize: 32, fontWeight: 700, color: color || C.text, fontFamily: "monospace", lineHeight: 1.05 }}>{value}</div>
       <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: C.muted, marginTop: 10, fontWeight: 600 }}>{label}</div>
       {sub && <div style={{ fontSize: 11, color: good === true ? C.green : good === false ? C.red : C.muted, marginTop: 4 }}>{sub}</div>}
