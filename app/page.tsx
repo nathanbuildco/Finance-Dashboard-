@@ -248,15 +248,9 @@ export default function Dashboard() {
   const currentHC = actuals.length > 0 ? actuals[actuals.length - 1].headcount : 0;
   const maxHC = Math.max(...months.map(m => m.headcount), 0);
 
-  // ── Overview: 12 months starting March 2026 ──
+  // ── Overview: next 12 projected months (after last actual) ──
   const overviewData = useMemo(() => {
-    const start = new Date(2026, 2, 1);
-    return months
-      .filter(m => {
-        const d = parseMonthLabel(m.month);
-        return d && d >= start;
-      })
-      .slice(0, 12);
+    return months.filter(m => !m.actual).slice(0, 12);
   }, [months]);
 
   const cumData = useMemo(() => {
@@ -384,7 +378,7 @@ export default function Dashboard() {
       {/* ═══════════ OVERVIEW ═══════════ */}
       {tab === "overview" && (
         <>
-          <Section>Monthly Spend — Actuals + Projections</Section>
+          <Section>NTM Spend Projections</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
             <ResponsiveContainer width="100%" height={340}>
               <ComposedChart data={overviewData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
