@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   BarChart, Bar, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Line
+  ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Line, LabelList
 } from "recharts";
 import { logout } from "./actions/auth";
 
@@ -149,6 +149,19 @@ const fmt = (v: number | null | undefined): string => {
   return `$${v.toFixed(0)}`;
 };
 const fmtFull = (v: number): string => `$${Math.round(v).toLocaleString()}`;
+const fmtLabel = (v: number): string => {
+  if (!v) return "";
+  const abs = Math.abs(v);
+  if (abs >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `$${Math.round(v / 1_000)}k`;
+  return `$${Math.round(v)}`;
+};
+const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const fmtMonth = (s: string): string => {
+  const d = parseMonthLabel(s);
+  if (!d) return s;
+  return `${MONTHS_SHORT[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`;
+};
 
 const C = {
   bg: "#0c0f14", card: "#141820", border: "#1e2430",
@@ -363,7 +376,7 @@ export default function Dashboard() {
           <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: C.blue, marginBottom: 4, fontWeight: 600 }}>Financial Projections</div>
           <h1 style={{ fontSize: 26, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>Finance Dashboard</h1>
           <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
-            Actuals through {reviewLabel} · Live from Google Sheets
+            Actuals through {reviewLabel}
             <button onClick={load} style={{ marginLeft: 12, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 6, padding: "2px 10px", cursor: "pointer", fontSize: 11 }}>↻ Refresh</button>
           </div>
         </div>
@@ -392,30 +405,34 @@ export default function Dashboard() {
         <>
           <Section>NTM Spend Projections</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
-            <ResponsiveContainer width="100%" height={340}>
-              <ComposedChart data={overviewData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={380}>
+              <ComposedChart data={overviewData} margin={{ top: 32, right: 20, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
-                <XAxis dataKey="month" tick={{ fill: C.muted, fontSize: 9, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 11, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
                 <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar dataKey="overhead" name="Corp Overhead" stackId="a" fill={C.blue} />
                 <Bar dataKey="corpDev" name="Corp Dev" stackId="a" fill={C.purple} />
-                <Bar dataKey="projDev" name="Project Dev" stackId="a" fill={C.green} radius={[3, 3, 0, 0] as [number, number, number, number]} />
+                <Bar dataKey="projDev" name="Project Dev" stackId="a" fill={C.green} radius={[3, 3, 0, 0] as [number, number, number, number]}>
+                  <LabelList dataKey="total" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.text, fontSize: 11, fontFamily: "monospace", fontWeight: 600 }} />
+                </Bar>
                 <Line type="monotone" dataKey="total" name="Total" stroke="#fff" strokeWidth={1.5} dot={false} strokeDasharray="4 3" />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
           <Section>Cumulative Spend</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={cumData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={320}>
+              <AreaChart data={cumData} margin={{ top: 28, right: 20, left: 10, bottom: 0 }}>
                 <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.blue} stopOpacity={0.3} /><stop offset="95%" stopColor={C.blue} stopOpacity={0} /></linearGradient></defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
-                <XAxis dataKey="month" tick={{ fill: C.muted, fontSize: 9, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 11, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
                 <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
-                <Area type="monotone" dataKey="cumulative" name="Cumulative" stroke={C.blue} fill="url(#cg)" strokeWidth={2} />
+                <Area type="monotone" dataKey="cumulative" name="Cumulative" stroke={C.blue} fill="url(#cg)" strokeWidth={2}>
+                  <LabelList dataKey="cumulative" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.text, fontSize: 9, fontFamily: "monospace", fontWeight: 600 }} />
+                </Area>
               </AreaChart>
             </ResponsiveContainer>
           </div>
