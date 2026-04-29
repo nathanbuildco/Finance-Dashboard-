@@ -6,6 +6,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Line
 } from "recharts";
+import { logout } from "./actions/auth";
 
 // ══════════════════════════════════════════════
 // CONFIG
@@ -739,9 +740,16 @@ export default function Dashboard() {
       )}
 
       {/* FOOTER */}
-      <div style={{ marginTop: 40, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", fontSize: 11, color: C.muted }}>
+      <div style={{ marginTop: 40, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, fontSize: 11, color: C.muted, flexWrap: "wrap" }}>
         <span>Live from Google Sheets · Actuals through {reviewLabel}</span>
-        <span>Auto-refreshes every 5 min</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span>Auto-refreshes every 5 min</span>
+          <form action={logout}>
+            <button type="submit" style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
+              Log out
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );
