@@ -176,10 +176,10 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 
 function KPI({ label, value, sub, color, good }: { label: string; value: string; sub?: string; color?: string; good?: boolean }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", flex: 1, minWidth: 190 }}>
-      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: C.muted, marginBottom: 8 }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: color || C.text, fontFamily: "monospace", lineHeight: 1.1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: good === true ? C.green : good === false ? C.red : C.muted, marginTop: 6 }}>{sub}</div>}
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "22px 24px", flex: 1, minWidth: 190, textAlign: "center" }}>
+      <div style={{ fontSize: 32, fontWeight: 700, color: color || C.text, fontFamily: "monospace", lineHeight: 1.05 }}>{value}</div>
+      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: C.muted, marginTop: 10, fontWeight: 600 }}>{label}</div>
+      {sub && <div style={{ fontSize: 11, color: good === true ? C.green : good === false ? C.red : C.muted, marginTop: 4 }}>{sub}</div>}
     </div>
   );
 }
@@ -370,7 +370,7 @@ export default function Dashboard() {
 
       {/* KPIs */}
       <div style={{ display: "flex", gap: 14, marginBottom: 8, flexWrap: "wrap" }}>
-        <KPI label="YTD Actual Spend" value={fmt(ytd.total)} />
+        <KPI label="Spend Since Inception" value={fmt(ytd.total)} />
         <KPI label="NTM Projected Spend" value={fmt(ntmTotal)} />
         <KPI label="Headcount" value={`${currentHC} → ${maxHC}`} sub={`+${maxHC - currentHC} hires projected`} />
         <KPI label="Months of Data" value={`${actuals.length} actual`} sub={`${projected.length} projected`} />
