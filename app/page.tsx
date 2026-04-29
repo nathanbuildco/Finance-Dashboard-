@@ -252,6 +252,8 @@ export default function Dashboard() {
   const overviewData = useMemo(() => {
     return months.filter(m => !m.actual).slice(0, 12);
   }, [months]);
+  const ntmTotal = useMemo(() => overviewData.reduce((s, m) => s + m.total, 0), [overviewData]);
+  const ntmVariance = PLAN.total - ntmTotal;
 
   const cumData = useMemo(() => {
     let cum = 0;
@@ -370,7 +372,7 @@ export default function Dashboard() {
       {/* KPIs */}
       <div style={{ display: "flex", gap: 14, marginBottom: 8, flexWrap: "wrap" }}>
         <KPI label="YTD Actual Spend" value={fmt(ytd.total)} sub={`vs ${fmt(ytdPlan.total)} plan`} good={ytd.total <= ytdPlan.total} />
-        <KPI label="Total Projected" value={fmt(totalProjected.total)} sub={projVariance > 0 ? `${fmt(projVariance)} under plan` : `${fmt(Math.abs(projVariance))} over plan`} good={projVariance >= 0} color={projVariance < 0 ? C.orange : undefined} />
+        <KPI label="Total Projected" value={fmt(ntmTotal)} sub={ntmVariance > 0 ? `${fmt(ntmVariance)} under plan` : `${fmt(Math.abs(ntmVariance))} over plan`} good={ntmVariance >= 0} color={ntmVariance < 0 ? C.orange : undefined} />
         <KPI label="Headcount" value={`${currentHC} → ${maxHC}`} sub={`+${maxHC - currentHC} hires projected`} />
         <KPI label="Months of Data" value={`${actuals.length} actual`} sub={`${projected.length} projected`} />
       </div>
