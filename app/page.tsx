@@ -458,7 +458,7 @@ export default function Dashboard() {
                     { name: "Corp Overhead", value: ntmTotals.overhead, color: C.blue },
                     { name: "Corp Dev", value: ntmTotals.corpDev, color: C.purple },
                     { name: "Proj Dev", value: ntmTotals.projDev, color: C.green },
-                  ]} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={3} dataKey="value"
+                  ]} cx="50%" cy="60%" innerRadius={60} outerRadius={100} paddingAngle={3} dataKey="value"
                     label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`}
                     labelLine={{ stroke: C.muted }}>
                     <Cell fill={C.blue} /><Cell fill={C.purple} /><Cell fill={C.green} />
