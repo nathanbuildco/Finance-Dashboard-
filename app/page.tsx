@@ -114,7 +114,7 @@ function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string } {
   let lastReviewSerial = 46112;
   if (reviewRow) { for (const cell of reviewRow) { const v = parseFloat(cell); if (!isNaN(v) && v > 45000 && v < 50000) { lastReviewSerial = v; break; } } }
   const lastReviewDate = new Date(1899, 11, 30 + lastReviewSerial);
-  const reviewLabel = lastReviewDate.toLocaleString("en-US", { month: "short", year: "numeric" });
+  const reviewLabel = lastReviewDate.toLocaleString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
 
   const months: MonthData[] = [];
   for (const mc of monthCols) {
@@ -356,8 +356,8 @@ export default function Dashboard() {
         <div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/tbc-logo.svg" alt="The Building Company" style={{ height: 40, width: "auto", display: "block", marginBottom: 14 }} />
-          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: C.blue, marginBottom: 4, fontWeight: 600 }}>Finance Review — Live</div>
-          <h1 style={{ fontSize: 26, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>Forward Projections Dashboard</h1>
+          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: C.blue, marginBottom: 4, fontWeight: 600 }}>Financial Projections</div>
+          <h1 style={{ fontSize: 26, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>Finance Dashboard</h1>
           <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
             Actuals through {reviewLabel} · Live from Google Sheets
             <button onClick={load} style={{ marginLeft: 12, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 6, padding: "2px 10px", cursor: "pointer", fontSize: 11 }}>↻ Refresh</button>
