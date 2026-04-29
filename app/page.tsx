@@ -283,6 +283,18 @@ export default function Dashboard() {
     }));
   }, [months]);
 
+  // ── Next fully-projected quarter's annualized payroll ──
+  const nextQuarterPayroll = useMemo(() => {
+    const firstProjected = projected[0];
+    if (!firstProjected) return null;
+    const d = parseMonthLabel(firstProjected.month);
+    if (!d) return null;
+    const q = Math.floor(d.getMonth() / 3) + 1;
+    const yr = d.getFullYear();
+    const key = `Q${q} '${String(yr).slice(2)}`;
+    return quarterlyPayroll.find(qp => qp.quarter === key) ?? null;
+  }, [projected, quarterlyPayroll]);
+
   // ── Projected vs Plan monthly ──
   const projVsPlanData = useMemo(() => {
     const monthlyPlan = PLAN.total / months.length;
@@ -371,7 +383,7 @@ export default function Dashboard() {
           <KPI label="Spend Since Inception" value={fmt(ytd.total)} />
           <KPI label="NTM Projected Spend" value={fmt(ntmTotal)} />
           <KPI label="Avg Monthly Burn (NTM)" value={fmt(ntmTotal / Math.max(overviewData.length, 1))} />
-          <KPI label="Months of Data" value={`${actuals.length} actual`} sub={`${projected.length} projected`} />
+          <KPI label={`Annualized Payroll${nextQuarterPayroll ? ` (${nextQuarterPayroll.quarter})` : ""}`} value={nextQuarterPayroll ? fmt(nextQuarterPayroll.annualized) : "—"} />
         </div>
       )}
 
