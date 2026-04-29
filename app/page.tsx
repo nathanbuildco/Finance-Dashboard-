@@ -262,7 +262,12 @@ export default function Dashboard() {
   const overviewData = useMemo(() => {
     return months.filter(m => !m.actual).slice(0, 12);
   }, [months]);
-  const ntmTotal = useMemo(() => overviewData.reduce((s, m) => s + m.total, 0), [overviewData]);
+  const ntmTotals = useMemo(() => ({
+    overhead: overviewData.reduce((s, m) => s + m.overhead, 0),
+    corpDev:  overviewData.reduce((s, m) => s + m.corpDev,  0),
+    projDev:  overviewData.reduce((s, m) => s + m.projDev,  0),
+    total:    overviewData.reduce((s, m) => s + m.total,    0),
+  }), [overviewData]);
 
   const cumData = useMemo(() => {
     const visible = [
@@ -398,8 +403,8 @@ export default function Dashboard() {
       {tab === "overview" && (
         <div style={{ display: "flex", gap: 14, marginBottom: 8, flexWrap: "wrap" }}>
           <KPI label="Spend Since Inception" value={fmt(ytd.total)} />
-          <KPI label="NTM Projected Spend" value={fmt(ntmTotal)} />
-          <KPI label="Avg Monthly Burn (NTM)" value={fmt(ntmTotal / Math.max(overviewData.length, 1))} />
+          <KPI label="NTM Projected Spend" value={fmt(ntmTotals.total)} />
+          <KPI label="Avg Monthly Burn (NTM)" value={fmt(ntmTotals.total / Math.max(overviewData.length, 1))} />
           <KPI label={`Annualized Payroll${nextQuarterPayroll ? ` (${nextQuarterPayroll.quarter})` : ""}`} value={nextQuarterPayroll ? fmt(nextQuarterPayroll.annualized) : "—"} />
         </div>
       )}
@@ -444,15 +449,15 @@ export default function Dashboard() {
       {/* ═══════════ COST BREAKDOWN ═══════════ */}
       {tab === "costs" && (
         <>
-          <Section>Cost Mix — Total Projected</Section>
+          <Section>Cost Mix — NTM</Section>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, flex: "1 1 280px", minWidth: 280 }}>
               <ResponsiveContainer width="100%" height={260}>
                 <PieChart>
                   <Pie data={[
-                    { name: "Corp Overhead", value: totalProjected.overhead, color: C.blue },
-                    { name: "Corp Dev", value: totalProjected.corpDev, color: C.purple },
-                    { name: "Proj Dev", value: totalProjected.projDev, color: C.green },
+                    { name: "Corp Overhead", value: ntmTotals.overhead, color: C.blue },
+                    { name: "Corp Dev", value: ntmTotals.corpDev, color: C.purple },
+                    { name: "Proj Dev", value: ntmTotals.projDev, color: C.green },
                   ]} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={3} dataKey="value"
                     label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`}
                     labelLine={{ stroke: C.muted }}>
@@ -464,9 +469,9 @@ export default function Dashboard() {
             </div>
             <div style={{ flex: "1 1 340px", minWidth: 340, display: "flex", flexDirection: "column", gap: 12 }}>
               {([
-                { label: "Corporate Overhead", val: totalProjected.overhead, plan: PLAN.overhead, color: C.blue, desc: "Payroll, insurance, travel, admin, office, recruiting" },
-                { label: "Corporate Development", val: totalProjected.corpDev, plan: PLAN.corpDev, color: C.purple, desc: "Legal (fundraise), design & branding, SEO" },
-                { label: "Project Development", val: totalProjected.projDev, plan: PLAN.projDev, color: C.green, desc: "Engineering, architect, legal, DD, broker, land carry" },
+                { label: "Corporate Overhead", val: ntmTotals.overhead, plan: PLAN.overhead, color: C.blue, desc: "Payroll, insurance, travel, admin, office, recruiting" },
+                { label: "Corporate Development", val: ntmTotals.corpDev, plan: PLAN.corpDev, color: C.purple, desc: "Legal (fundraise), design & branding, SEO" },
+                { label: "Project Development", val: ntmTotals.projDev, plan: PLAN.projDev, color: C.green, desc: "Engineering, architect, legal, DD, broker, land carry" },
               ]).map((item, i) => {
                 const v = item.plan - item.val;
                 return (
