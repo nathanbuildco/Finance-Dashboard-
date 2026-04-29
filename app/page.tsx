@@ -265,8 +265,12 @@ export default function Dashboard() {
   const ntmTotal = useMemo(() => overviewData.reduce((s, m) => s + m.total, 0), [overviewData]);
 
   const cumData = useMemo(() => {
+    const visible = [
+      ...months.filter(m => m.actual),
+      ...months.filter(m => !m.actual).slice(0, 12),
+    ];
     let cum = 0;
-    return months.map(d => { cum += d.total; return { ...d, cumulative: Math.round(cum) }; });
+    return visible.map(d => { cum += d.total; return { ...d, cumulative: Math.round(cum) }; });
   }, [months]);
 
   // ── Next 2 months data ──
