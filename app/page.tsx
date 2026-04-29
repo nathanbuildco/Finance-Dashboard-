@@ -426,11 +426,11 @@ export default function Dashboard() {
                     { name: "Corp Dev", value: totalProjected.corpDev, color: C.purple },
                     { name: "Proj Dev", value: totalProjected.projDev, color: C.green },
                   ]} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={3} dataKey="value"
-                    label={({ name, percent }: { name: string; percent: number }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`}
                     labelLine={{ stroke: C.muted }}>
                     <Cell fill={C.blue} /><Cell fill={C.purple} /><Cell fill={C.green} />
                   </Pie>
-                  <Tooltip formatter={(v: number) => fmtFull(v)} />
+                  <Tooltip formatter={(v) => fmtFull(Number(v))} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
