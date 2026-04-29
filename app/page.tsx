@@ -245,9 +245,6 @@ export default function Dashboard() {
     total: Math.round(PLAN.total * ytdPlanRatio),
   };
   const projVariance = PLAN.total - totalProjected.total;
-  const currentHC = actuals.length > 0 ? actuals[actuals.length - 1].headcount : 0;
-  const maxHC = Math.max(...months.map(m => m.headcount), 0);
-
   // ── Overview: next 12 projected months (after last actual) ──
   const overviewData = useMemo(() => {
     return months.filter(m => !m.actual).slice(0, 12);
@@ -369,12 +366,14 @@ export default function Dashboard() {
       </div>
 
       {/* KPIs */}
-      <div style={{ display: "flex", gap: 14, marginBottom: 8, flexWrap: "wrap" }}>
-        <KPI label="Spend Since Inception" value={fmt(ytd.total)} />
-        <KPI label="NTM Projected Spend" value={fmt(ntmTotal)} />
-        <KPI label="Headcount" value={`${currentHC} → ${maxHC}`} sub={`+${maxHC - currentHC} hires projected`} />
-        <KPI label="Months of Data" value={`${actuals.length} actual`} sub={`${projected.length} projected`} />
-      </div>
+      {tab === "overview" && (
+        <div style={{ display: "flex", gap: 14, marginBottom: 8, flexWrap: "wrap" }}>
+          <KPI label="Spend Since Inception" value={fmt(ytd.total)} />
+          <KPI label="NTM Projected Spend" value={fmt(ntmTotal)} />
+          <KPI label="Avg Monthly Burn (NTM)" value={fmt(ntmTotal / Math.max(overviewData.length, 1))} />
+          <KPI label="Months of Data" value={`${actuals.length} actual`} sub={`${projected.length} projected`} />
+        </div>
+      )}
 
       {/* ═══════════ OVERVIEW ═══════════ */}
       {tab === "overview" && (
