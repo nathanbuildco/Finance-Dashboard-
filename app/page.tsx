@@ -452,13 +452,13 @@ export default function Dashboard() {
           <Section>Cost Mix — NTM</Section>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, flex: "1 1 280px", minWidth: 280 }}>
-              <ResponsiveContainer width="100%" height={260}>
+              <ResponsiveContainer width="100%" height={320}>
                 <PieChart>
                   <Pie data={[
                     { name: "Corp Overhead", value: ntmTotals.overhead, color: C.blue },
                     { name: "Corp Dev", value: ntmTotals.corpDev, color: C.purple },
                     { name: "Proj Dev", value: ntmTotals.projDev, color: C.green },
-                  ]} cx="50%" cy="60%" innerRadius={60} outerRadius={100} paddingAngle={3} dataKey="value"
+                  ]} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={3} dataKey="value"
                     label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`}
                     labelLine={{ stroke: C.muted }}>
                     <Cell fill={C.blue} /><Cell fill={C.purple} /><Cell fill={C.green} />
