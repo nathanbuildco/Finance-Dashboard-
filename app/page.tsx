@@ -770,7 +770,7 @@ export default function Dashboard() {
 
       {/* FOOTER */}
       <div style={{ marginTop: 40, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, fontSize: 11, color: C.muted, flexWrap: "wrap" }}>
-        <span>Live from Google Sheets · Actuals through {reviewLabel}</span>
+        <span>Actuals through {reviewLabel}</span>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span>Auto-refreshes every 5 min</span>
           <form action={logout}>
