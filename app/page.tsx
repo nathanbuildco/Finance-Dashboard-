@@ -357,13 +357,13 @@ export default function Dashboard() {
   // ── Derived data ──
   const actuals = months.filter(m => m.actual);
   const projected = months.filter(m => !m.actual);
-  const ytd = {
+  const itd = {
     overhead: actuals.reduce((s, m) => s + m.overhead, 0),
     corpDev: actuals.reduce((s, m) => s + m.corpDev, 0),
     projDev: actuals.reduce((s, m) => s + m.projDev, 0),
     total: actuals.reduce((s, m) => s + m.total, 0),
   };
-  const ytdPlan = {
+  const itdPlan = {
     overhead: (planMonths[0]?.overhead ?? 0) * actuals.length,
     corpDev: (planMonths[0]?.corpDev ?? 0) * actuals.length,
     projDev: (planMonths[0]?.projDev ?? 0) * actuals.length,
@@ -479,7 +479,7 @@ export default function Dashboard() {
   const tabs = [
     { id: "overview", label: "Overview" },
     { id: "costs", label: "Cost Breakdown" },
-    { id: "variance", label: "Actuals vs Plan" },
+    { id: "variance", label: "ITD vs Plan" },
     { id: "headcount", label: "Headcount" },
     { id: "cashneeds", label: "Cash Needs" },
     { id: "payroll", label: "Payroll" },
@@ -520,7 +520,7 @@ export default function Dashboard() {
       {/* KPIs */}
       {tab === "overview" && (
         <div style={{ display: "flex", gap: 14, marginBottom: 8, flexWrap: "wrap" }}>
-          <KPI label="Spend Since Inception" value={fmt(ytd.total)} />
+          <KPI label="Spend Since Inception" value={fmt(itd.total)} />
           <KPI label="NTM Projected Spend" value={fmt(ntmTotals.total)} />
           <KPI label="Avg Monthly Burn (NTM)" value={fmt(ntmTotals.total / Math.max(overviewData.length, 1))} />
           <KPI label={`Annualized Payroll${nextQuarterPayroll ? ` (${nextQuarterPayroll.quarter})` : ""}`} value={nextQuarterPayroll ? fmt(nextQuarterPayroll.annualized) : "—"} />
@@ -617,24 +617,24 @@ export default function Dashboard() {
         </>
       )}
 
-      {/* ═══════════ ACTUALS VS PLAN ═══════════ */}
+      {/* ═══════════ ITD VS PLAN ═══════════ */}
       {tab === "variance" && (
         <>
-          <Section>YTD Actuals vs Plan</Section>
+          <Section>ITD Actuals vs Plan</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={[
-                { name: "Corp Overhead", ytdActual: ytd.overhead, ytdPlan: ytdPlan.overhead },
-                { name: "Corp Dev", ytdActual: ytd.corpDev, ytdPlan: ytdPlan.corpDev },
-                { name: "Proj Dev", ytdActual: ytd.projDev, ytdPlan: ytdPlan.projDev },
+                { name: "Corp Overhead", itdActual: itd.overhead, itdPlan: itdPlan.overhead },
+                { name: "Corp Dev", itdActual: itd.corpDev, itdPlan: itdPlan.corpDev },
+                { name: "Proj Dev", itdActual: itd.projDev, itdPlan: itdPlan.projDev },
               ]} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
                 <XAxis dataKey="name" tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: "#1e2430" }} />
                 <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="ytdActual" name="YTD Actual" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={40} />
-                <Bar dataKey="ytdPlan" name="YTD Plan" fill="rgba(255,255,255,0.15)" radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={40} stroke="rgba(255,255,255,0.3)" />
+                <Bar dataKey="itdActual" name="ITD Actual" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={40} />
+                <Bar dataKey="itdPlan" name="ITD Plan" fill="rgba(255,255,255,0.15)" radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={40} stroke="rgba(255,255,255,0.3)" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -643,17 +643,17 @@ export default function Dashboard() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                  {["Category", "YTD Actual", "YTD Plan", "Variance"].map((h, i) => (
+                  {["Category", "ITD Actual", "ITD Plan", "Variance"].map((h, i) => (
                     <th key={i} style={{ padding: "12px 16px", textAlign: i === 0 ? "left" : "right", color: C.muted, fontWeight: 500, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {([
-                  { n: "Corp Overhead", a: ytd.overhead, p: ytdPlan.overhead, b: false },
-                  { n: "Corp Dev", a: ytd.corpDev, p: ytdPlan.corpDev, b: false },
-                  { n: "Project Dev", a: ytd.projDev, p: ytdPlan.projDev, b: false },
-                  { n: "TOTAL", a: ytd.total, p: ytdPlan.total, b: true },
+                  { n: "Corp Overhead", a: itd.overhead, p: itdPlan.overhead, b: false },
+                  { n: "Corp Dev", a: itd.corpDev, p: itdPlan.corpDev, b: false },
+                  { n: "Project Dev", a: itd.projDev, p: itdPlan.projDev, b: false },
+                  { n: "TOTAL", a: itd.total, p: itdPlan.total, b: true },
                 ]).map((r, i) => {
                   const v = r.p - r.a;
                   return (
