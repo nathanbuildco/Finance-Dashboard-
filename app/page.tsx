@@ -322,10 +322,6 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  // Land acquisition deposit inputs
-  const [deposit1, setDeposit1] = useState<string>("0");
-  const [deposit2, setDeposit2] = useState<string>("0");
-
   const load = useCallback(async () => {
     try {
       setLoading(true);
@@ -400,8 +396,6 @@ export default function Dashboard() {
 
   // ── Next 2 months data ──
   const next2 = projected.slice(0, 2);
-  const dep1 = parseFloat(deposit1) || 0;
-  const dep2 = parseFloat(deposit2) || 0;
 
   // ── Quarterly payroll data ──
   const quarterlyPayroll = useMemo(() => {
@@ -494,12 +488,6 @@ export default function Dashboard() {
     { id: "payroll", label: "Payroll" },
     { id: "projvsplan", label: "Proj vs Plan" },
   ];
-
-  const inputStyle = {
-    background: "#1a1f2e", border: `1px solid ${C.border}`, borderRadius: 8,
-    padding: "10px 14px", color: C.text, fontFamily: "monospace", fontSize: 14,
-    width: "100%", outline: "none",
-  };
 
   return (
     <div style={{ background: C.bg, minHeight: "100vh", color: C.text, padding: "24px 28px", fontFamily: "system-ui, -apple-system, sans-serif" }}>
@@ -707,88 +695,53 @@ export default function Dashboard() {
         <>
           <Section>Next 2 Months — Projected Cash Needs</Section>
 
-          {/* Deposit Inputs */}
-          <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 20px", flex: "1 1 240px" }}>
-              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: C.orange, marginBottom: 8, fontWeight: 600 }}>
-                Land Acquisition Deposits
-              </div>
-              <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>
-                Enter projected deposit amounts for the next 2 months. These are not in the Google Sheet — input manually.
-              </div>
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                <div style={{ flex: 1, minWidth: 160 }}>
-                  <label style={{ fontSize: 11, color: C.muted, display: "block", marginBottom: 4 }}>{next2[0]?.month || "Month 1"} Deposits ($)</label>
-                  <input type="text" value={deposit1} onChange={e => setDeposit1(e.target.value)} style={inputStyle} placeholder="0" />
-                </div>
-                <div style={{ flex: 1, minWidth: 160 }}>
-                  <label style={{ fontSize: 11, color: C.muted, display: "block", marginBottom: 4 }}>{next2[1]?.month || "Month 2"} Deposits ($)</label>
-                  <input type="text" value={deposit2} onChange={e => setDeposit2(e.target.value)} style={inputStyle} placeholder="0" />
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* Cash Needs Cards */}
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
-            {next2.map((m, idx) => {
-              const dep = idx === 0 ? dep1 : dep2;
-              const totalWithDep = m.total + dep;
-              return (
-                <div key={idx} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "24px 28px", flex: "1 1 380px", minWidth: 380 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                    <div>
-                      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: C.muted }}>{idx === 0 ? "Next Month" : "Month After"}</div>
-                      <div style={{ fontSize: 22, fontWeight: 700 }}>{m.month}</div>
+            {next2.map((m, idx) => (
+              <div key={idx} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "24px 28px", flex: "1 1 380px", minWidth: 380 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                  <div>
+                    <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: C.muted }}>{idx === 0 ? "Next Month" : "Month After"}</div>
+                    <div style={{ fontSize: 22, fontWeight: 700 }}>{m.month}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 11, textTransform: "uppercase", color: C.muted }}>Total Cash Need</div>
+                    <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "monospace", color: C.orange }}>{fmt(m.total)}</div>
+                  </div>
+                </div>
+
+                {/* Breakdown bars */}
+                {([
+                  { label: "Corporate Overhead", val: m.overhead, color: C.blue },
+                  { label: "Corporate Development", val: m.corpDev, color: C.purple },
+                  { label: "Project Development", val: m.projDev, color: C.green },
+                ]).map((item, j) => (
+                  <div key={j} style={{ marginBottom: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                      <span style={{ fontSize: 12, color: C.muted }}>{item.label}</span>
+                      <span style={{ fontSize: 12, fontFamily: "monospace", fontWeight: 600 }}>{fmtFull(item.val)}</span>
                     </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontSize: 11, textTransform: "uppercase", color: C.muted }}>Total Cash Need</div>
-                      <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "monospace", color: C.orange }}>{fmt(totalWithDep)}</div>
+                    <div style={{ height: 6, background: "#1e2430", borderRadius: 3, overflow: "hidden" }}>
+                      <div style={{ height: "100%", background: item.color, borderRadius: 3, width: `${Math.min((item.val / m.total) * 100, 100)}%`, transition: "width 0.4s" }} />
                     </div>
                   </div>
-
-                  {/* Breakdown bars */}
-                  {([
-                    { label: "Corporate Overhead", val: m.overhead, color: C.blue },
-                    { label: "Corporate Development", val: m.corpDev, color: C.purple },
-                    { label: "Project Development", val: m.projDev, color: C.green },
-                    ...(dep > 0 ? [{ label: "Land Acq Deposits", val: dep, color: C.orange }] : []),
-                  ]).map((item, j) => (
-                    <div key={j} style={{ marginBottom: 12 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                        <span style={{ fontSize: 12, color: C.muted }}>{item.label}</span>
-                        <span style={{ fontSize: 12, fontFamily: "monospace", fontWeight: 600 }}>{fmtFull(item.val)}</span>
-                      </div>
-                      <div style={{ height: 6, background: "#1e2430", borderRadius: 3, overflow: "hidden" }}>
-                        <div style={{ height: "100%", background: item.color, borderRadius: 3, width: `${Math.min((item.val / totalWithDep) * 100, 100)}%`, transition: "width 0.4s" }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
+                ))}
+              </div>
+            ))}
           </div>
 
           {/* Stacked bar comparison */}
           {next2.length === 2 && (
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
               <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={next2.map((m, i) => ({
-                  month: m.month,
-                  overhead: m.overhead,
-                  corpDev: m.corpDev,
-                  projDev: m.projDev,
-                  deposits: i === 0 ? dep1 : dep2,
-                }))} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
+                <BarChart data={next2} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
                   <XAxis dataKey="month" tick={{ fill: C.muted, fontSize: 12 }} axisLine={{ stroke: "#1e2430" }} />
                   <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                   <Tooltip content={<ChartTooltip />} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Bar dataKey="overhead" name="Corp Overhead" stackId="a" fill={C.blue} />
                   <Bar dataKey="corpDev" name="Corp Dev" stackId="a" fill={C.purple} />
-                  <Bar dataKey="projDev" name="Project Dev" stackId="a" fill={C.green} />
-                  <Bar dataKey="deposits" name="Land Acq Deposits" stackId="a" fill={C.orange} radius={[4, 4, 0, 0] as [number, number, number, number]} />
+                  <Bar dataKey="projDev" name="Project Dev" stackId="a" fill={C.green} radius={[4, 4, 0, 0] as [number, number, number, number]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
