@@ -363,11 +363,14 @@ export default function Dashboard() {
     projDev: actuals.reduce((s, m) => s + m.projDev, 0),
     total: actuals.reduce((s, m) => s + m.total, 0),
   };
+  // Operations started July '25 — June '25 expenses are lumped into July, so the actuals
+  // array has one extra month vs. real months of operation. Subtract one for plan scaling.
+  const opsMonths = Math.max(actuals.length - 1, 0);
   const itdPlan = {
-    overhead: (planMonths[0]?.overhead ?? 0) * actuals.length,
-    corpDev: (planMonths[0]?.corpDev ?? 0) * actuals.length,
-    projDev: (planMonths[0]?.projDev ?? 0) * actuals.length,
-    total: (planMonths[0]?.total ?? 0) * actuals.length,
+    overhead: (planMonths[0]?.overhead ?? 0) * opsMonths,
+    corpDev: (planMonths[0]?.corpDev ?? 0) * opsMonths,
+    projDev: (planMonths[0]?.projDev ?? 0) * opsMonths,
+    total: (planMonths[0]?.total ?? 0) * opsMonths,
   };
   // ── Overview: next 12 projected months (after last actual) ──
   const overviewData = useMemo(() => {
