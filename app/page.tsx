@@ -363,12 +363,11 @@ export default function Dashboard() {
     projDev: actuals.reduce((s, m) => s + m.projDev, 0),
     total: actuals.reduce((s, m) => s + m.total, 0),
   };
-  const ytdPlanRatio = actuals.length / (months.length || 1);
   const ytdPlan = {
-    overhead: Math.round(PLAN.overhead * ytdPlanRatio),
-    corpDev: Math.round(PLAN.corpDev * ytdPlanRatio),
-    projDev: Math.round(PLAN.projDev * ytdPlanRatio),
-    total: Math.round(PLAN.total * ytdPlanRatio),
+    overhead: planMonths.filter(p => actuals.some(a => fmtMonth(a.month) === fmtMonth(p.month))).reduce((s, m) => s + m.overhead, 0),
+    corpDev: planMonths.filter(p => actuals.some(a => fmtMonth(a.month) === fmtMonth(p.month))).reduce((s, m) => s + m.corpDev, 0),
+    projDev: planMonths.filter(p => actuals.some(a => fmtMonth(a.month) === fmtMonth(p.month))).reduce((s, m) => s + m.projDev, 0),
+    total: planMonths.filter(p => actuals.some(a => fmtMonth(a.month) === fmtMonth(p.month))).reduce((s, m) => s + m.total, 0),
   };
   // ── Overview: next 12 projected months (after last actual) ──
   const overviewData = useMemo(() => {
