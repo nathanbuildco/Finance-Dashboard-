@@ -173,7 +173,13 @@ function parseMonthLabel(label: string): Date | null {
 
 interface PitchDeck { overhead: number; corpDev: number; projDev: number; total: number }
 interface PlanMonth { month: string; overhead: number; corpDev: number; projDev: number; total: number; fixedExpenses: number }
-interface LineItem { label: string; monthly: Record<string, number> }
+interface LineItem { label: string; monthly: Record<string, number>; bucket: string | null }
+
+const SECTION_BUCKETS: Record<string, string> = {
+  "corporate overhead costs": "Corp Overhead",
+  "corporate development costs": "Corp Dev",
+  "project development costs": "Proj Dev",
+};
 
 function parsePlanSheet(csv: string): { planMonths: PlanMonth[] } {
   const rows = parseCSV(csv);
@@ -352,9 +358,12 @@ function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; pi
   const pitchDeck = readCol(pitchCol, "Pitch Deck");
   const ntmProj = readCol(projCol, "NTM Projected");
 
-  // Capture every populated row as a line item so we can rank top vendors.
-  // Month keys are normalized the same way MonthData.month is, so they line up later.
+  // Capture every populated row as a line item so we can rank top expenses.
+  // Track the most recent category-header row so each line item knows its bucket
+  // (Corp Overhead / Corp Dev / Proj Dev). Month keys are normalized the same way
+  // MonthData.month is, so they line up later.
   const lineItems: LineItem[] = [];
+  let currentBucket: string | null = null;
   for (const row of rows) {
     let label = "";
     for (let c = 0; c < Math.min(row.length, 5); c++) {
@@ -362,6 +371,11 @@ function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; pi
       if (cell) { label = cell; break; }
     }
     if (!label) continue;
+    const sectionKey = label.toLowerCase().trim();
+    if (sectionKey in SECTION_BUCKETS) {
+      currentBucket = SECTION_BUCKETS[sectionKey];
+      // section header row itself is excluded later via SUMMARY_ROW_LABELS
+    }
     if (/^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s*[''`']?\s*\d{2,4}/i.test(label)) continue;
     if (label.toLowerCase().startsWith("ntm")) continue;
     const monthly: Record<string, number> = {};
@@ -372,7 +386,7 @@ function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; pi
       monthly[mc.label.replace(/[''`]/g, "'").replace(/\s+/g, " ").trim()] = v;
     }
     if (!hasValue) continue;
-    lineItems.push({ label, monthly });
+    lineItems.push({ label, monthly, bucket: currentBucket });
   }
 
   return { months: months.filter(m => m.total > 0), reviewLabel, pitchDeck, ntmProj, lineItems };
@@ -623,7 +637,7 @@ export default function Dashboard() {
       .map(li => {
         const monthly = overviewData.map(m => li.monthly[m.month] || 0);
         const ntmTotal = monthly.reduce((s, v) => s + v, 0);
-        return { label: li.label, ntmTotal, monthly };
+        return { label: li.label, bucket: li.bucket, ntmTotal, monthly };
       })
       .filter(v => v.ntmTotal > 0)
       .sort((a, b) => b.ntmTotal - a.ntmTotal)
@@ -811,44 +825,103 @@ export default function Dashboard() {
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
                 {topExpenses.map((e, i) => {
                   const pct = ntmTotals.total > 0 ? (e.ntmTotal / ntmTotals.total) * 100 : 0;
-                  const max = Math.max(...e.monthly);
+                  const colors = [C.blue, C.orange, C.purple];
+                  const color = colors[i] ?? C.blue;
+                  const sparkData = e.monthly.map((v, j) => ({ month: overviewData[j]?.month || "", value: v }));
+                  const gradId = `topExpGrad-${i}`;
                   return (
                     <div
                       key={e.label}
                       style={{
+                        position: "relative",
                         background: C.card,
                         border: `1px solid ${C.border}`,
-                        borderTop: `1px solid ${C.blue}`,
+                        borderTop: `1px solid ${color}`,
                         borderRadius: 12,
-                        padding: "20px 24px",
+                        padding: "20px 24px 16px",
                         flex: "1 1 240px",
                         minWidth: 240,
-                        boxShadow: `inset 0 1px 0 ${C.blue}33`,
+                        boxShadow: `inset 0 1px 0 ${color}33`,
                         display: "flex",
                         flexDirection: "column",
                       }}
                     >
-                      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: C.muted, marginBottom: 6 }}>
+                      <div style={{
+                        position: "absolute",
+                        top: -1,
+                        right: 16,
+                        background: color,
+                        color: C.bg,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: "3px 8px",
+                        borderRadius: "0 0 6px 6px",
+                      }}>
                         #{i + 1}
                       </div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>{e.label}</div>
-                      <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "monospace", color: C.blue, lineHeight: 1.1 }}>{fmt(e.ntmTotal)}</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8, paddingRight: 32 }}>{e.label}</div>
+                      {e.bucket && (
+                        <div style={{
+                          alignSelf: "flex-start",
+                          fontSize: 10,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                          background: "rgba(255,255,255,0.05)",
+                          border: `1px solid ${C.border}`,
+                          borderRadius: 4,
+                          padding: "2px 8px",
+                          color: C.muted,
+                          marginBottom: 10,
+                          fontWeight: 600,
+                        }}>
+                          {e.bucket}
+                        </div>
+                      )}
+                      <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "monospace", color, lineHeight: 1.1 }}>{fmt(e.ntmTotal)}</div>
                       <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>{pct.toFixed(1)}% of NTM spend</div>
-                      <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 32, marginTop: 14 }}>
-                        {e.monthly.map((v, j) => (
-                          <div
-                            key={j}
-                            title={`${overviewData[j]?.month || ""}: ${fmt(v)}`}
-                            style={{
-                              flex: 1,
-                              height: max > 0 ? `${(v / max) * 100}%` : 0,
-                              minHeight: v > 0 ? 2 : 0,
-                              background: C.blue,
-                              opacity: 0.7,
-                              borderRadius: "2px 2px 0 0",
-                            }}
-                          />
-                        ))}
+                      <div style={{ marginTop: 14, marginLeft: -10, marginRight: -10, height: 64, overflow: "visible" }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={sparkData} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor={color} stopOpacity={0.4} />
+                                <stop offset="100%" stopColor={color} stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} hide />
+                            <YAxis hide domain={[0, "dataMax"]} />
+                            <Tooltip
+                              cursor={{ stroke: color, strokeWidth: 1, strokeDasharray: "3 3" }}
+                              allowEscapeViewBox={{ x: false, y: true }}
+                              wrapperStyle={{ outline: "none" }}
+                              content={({ active, payload, label }) => {
+                                if (!active || !payload?.length) return null;
+                                const v = Number(payload[0].value);
+                                return (
+                                  <div style={{
+                                    background: "#1a1f2e",
+                                    border: "1px solid #2a3040",
+                                    borderRadius: 6,
+                                    padding: "6px 10px",
+                                    fontFamily: "monospace",
+                                    boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+                                  }}>
+                                    <div style={{ color: C.muted, fontSize: 10, marginBottom: 2 }}>{fmtMonth(String(label))}</div>
+                                    <div style={{ color, fontSize: 12, fontWeight: 600 }}>{fmtFull(v)}</div>
+                                  </div>
+                                );
+                              }}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="value"
+                              stroke={color}
+                              fill={`url(#${gradId})`}
+                              strokeWidth={2}
+                              activeDot={{ r: 4, fill: color, stroke: C.card, strokeWidth: 2 }}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
                       </div>
                     </div>
                   );
