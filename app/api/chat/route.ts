@@ -2,13 +2,83 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { AUTH_COOKIE, isValidToken } from "@/app/lib/auth";
 
+const SHEET_CSV_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTlUqIymbq_OgJ70EoO2uARD86PqF5vKmG_CzYTyzSzxdEXGTtk3mgRf7NhecnaXjhdTpyor_e3-NJ5/pub?gid=634011599&single=true&output=csv";
+
+function parseCSV(text: string): string[][] {
+  const rows: string[][] = [];
+  let current = ""; let inQ = false; let row: string[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQ) {
+      if (ch === '"' && text[i + 1] === '"') { current += '"'; i++; }
+      else if (ch === '"') { inQ = false; }
+      else { current += ch; }
+    } else {
+      if (ch === '"') { inQ = true; }
+      else if (ch === ",") { row.push(current.trim()); current = ""; }
+      else if (ch === "\n" || (ch === "\r" && text[i + 1] === "\n")) {
+        row.push(current.trim()); rows.push(row); row = []; current = "";
+        if (ch === "\r") i++;
+      } else { current += ch; }
+    }
+  }
+  if (current || row.length) { row.push(current.trim()); rows.push(row); }
+  return rows;
+}
+
+function toNum(val: string | undefined): number {
+  if (!val) return 0;
+  const cleaned = val.replace(/[$,\s"]/g, "").replace(/[()]/g, "");
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? 0 : n;
+}
+
+const MONTH_HEADER_RE = /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s*[''`']?\s*\d{2,4}/i;
+
+function parseAllLineItems(csvText: string): { monthLabels: string[]; lineItems: { label: string; values: number[] }[] } {
+  const rows = parseCSV(csvText);
+
+  let monthCols: { col: number; label: string }[] = [];
+  for (const row of rows) {
+    const temp: { col: number; label: string }[] = [];
+    for (let c = 0; c < row.length; c++) {
+      const cell = (row[c] || "").trim();
+      if (MONTH_HEADER_RE.test(cell)) temp.push({ col: c, label: cell.replace(/\s+/g, " ") });
+    }
+    if (temp.length >= 10) { monthCols = temp; break; }
+  }
+  if (monthCols.length === 0) return { monthLabels: [], lineItems: [] };
+
+  const monthLabels = monthCols.map(mc => mc.label);
+  const lineItems: { label: string; values: number[] }[] = [];
+
+  for (const row of rows) {
+    // First non-empty cell in the label area becomes the row label.
+    let label = "";
+    for (let c = 0; c < Math.min(row.length, 5); c++) {
+      const cell = (row[c] || "").trim();
+      if (cell) { label = cell; break; }
+    }
+    if (!label) continue;
+    if (MONTH_HEADER_RE.test(label)) continue;          // skip the header row itself
+    if (label.toLowerCase().startsWith("ntm")) continue; // skip "NTM Projected"/"NTM Pitch Deck" summary col headers
+
+    const values = monthCols.map(mc => toNum(row[mc.col]));
+    if (values.every(v => v === 0)) continue;            // skip empty / pure-section-header rows
+
+    lineItems.push({ label, values });
+  }
+
+  return { monthLabels, lineItems };
+}
+
 export async function POST(request: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "ANTHROPIC_API_KEY is not configured on the server." }, { status: 500 });
   }
 
-  // Reuse the dashboard's cookie auth so the chat endpoint isn't open to the internet.
   const cookieStore = await cookies();
   const token = cookieStore.get(AUTH_COOKIE)?.value;
   if (!isValidToken(token)) {
@@ -27,9 +97,37 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Question is required." }, { status: 400 });
   }
 
-  const systemPrompt = `You are a financial analyst assistant for The Building Company. You have access to their financial projections data. Answer questions concisely about spending, costs, headcount, and projections. Use specific numbers from the data provided.
+  // Fetch the raw actuals/projections CSV ourselves so we get every populated row,
+  // not just the summary numbers the client sends. 5-min Next fetch cache keeps
+  // follow-up questions fast.
+  let lineItemBlock = "(line item detail unavailable)";
+  try {
+    const csvRes = await fetch(SHEET_CSV_URL, { next: { revalidate: 300 } });
+    if (csvRes.ok) {
+      const csv = await csvRes.text();
+      const { monthLabels, lineItems } = parseAllLineItems(csv);
+      lineItemBlock =
+        `Month columns (in order, applies to every row's "values" array):\n${JSON.stringify(monthLabels)}\n\n` +
+        `Line items (${lineItems.length} populated rows):\n${JSON.stringify(lineItems)}`;
+    } else {
+      console.error("[chat] CSV fetch returned", csvRes.status);
+    }
+  } catch (e) {
+    console.error("[chat] Failed to fetch actuals CSV:", e);
+  }
 
-Current financial data (JSON):
+  const systemPrompt = `You are a financial analyst assistant for The Building Company. You have access to their financial projections data, INCLUDING vendor-level line item detail. Answer questions concisely about spending, costs, headcount, projections, and specific vendors. Use specific numbers from the data provided. When the user asks about a specific vendor (e.g. "how much are we spending on Dover Kohl in July?"), find the matching line item by label and quote the value for the month they asked about.
+
+Vendor reference (common labels you'll see in the line items — match flexibly, the sheet may use abbreviations):
+- DK&P = Dover Kohl & Partners (architect / town planning)
+- Doucet = civil engineering
+- Kittelson = transportation engineering
+- Armbrust Brown = land use counsel
+
+Vendor-level line item detail (every populated row from the actuals + projections sheet, with monthly values):
+${lineItemBlock}
+
+Summary rollups (computed by the dashboard, useful for NTM totals, YTD/ITD, plan variance):
 ${JSON.stringify(body.financialData ?? {}, null, 2)}`;
 
   const apiResponse = await fetch("https://api.anthropic.com/v1/messages", {
@@ -42,8 +140,6 @@ ${JSON.stringify(body.financialData ?? {}, null, 2)}`;
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
       max_tokens: 1024,
-      // System prompt is cacheable — financial data doesn't change between most requests,
-      // so subsequent questions in the same 5-min window hit the cache.
       system: [
         {
           type: "text",
