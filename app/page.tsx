@@ -16,6 +16,12 @@ const SHEET_CSV_URL =
 const PLAN_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTlUqIymbq_OgJ70EoO2uARD86PqF5vKmG_CzYTyzSzxdEXGTtk3mgRf7NhecnaXjhdTpyor_e3-NJ5/pub?gid=1750179845&single=true&output=csv";
 
+const PLAN = {
+  overhead: 2633667, corpDev: 416667, projDev: 6687500, total: 9737833,
+};
+const PITCH_DECK_FALLBACK = {
+  overhead: 2509867, corpDev: 316667, projDev: 5350000, total: 2509867 + 316667 + 5350000,
+};
 
 // ══════════════════════════════════════════════
 // TYPES
@@ -126,7 +132,7 @@ function parsePlanSheet(csv: string): { planMonths: PlanMonth[] } {
   return { planMonths };
 }
 
-function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; ntmProj: PitchDeck | null } {
+function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; pitchDeck: PitchDeck | null; ntmProj: PitchDeck | null } {
   const rows = parseCSV(csv);
 
   // Find month label row
@@ -182,47 +188,62 @@ function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; nt
       payroll: Math.round(pr),
     });
   }
-  // Optional "NTM Projected" summary column from the actuals sheet — used as the displayed
-  // value on Cost Breakdown if present (falls back to the computed monthly sum otherwise).
+  // Find "NTM Projected" and "NTM Pitch Deck" summary columns — scan ALL rows in case the
+  // labels live in a different row than the month labels (merged cells, multi-row headers).
+  let pitchCol: number | null = null;
   let projCol: number | null = null;
+  let pitchHeaderRaw = "";
+  let projHeaderRaw = "";
   for (const row of rows) {
     for (let c = 0; c < row.length; c++) {
-      const cell = (row[c] || "").toLowerCase().replace(/\s+/g, " ").trim();
-      if (projCol === null && cell.includes("ntm projected")) projCol = c;
+      const raw = row[c] || "";
+      const cell = raw.toLowerCase().replace(/\s+/g, " ").trim();
+      if (pitchCol === null && (cell.includes("pitch deck") || cell.includes("ntm pitch"))) {
+        pitchCol = c;
+        pitchHeaderRaw = raw;
+      }
+      if (projCol === null && cell.includes("ntm projected")) {
+        projCol = c;
+        projHeaderRaw = raw;
+      }
     }
   }
-  let ntmProj: PitchDeck | null = null;
-  if (projCol !== null) {
-    const oh = toNum(overheadRow?.[projCol]);
-    const cd = toNum(corpDevRow?.[projCol]);
-    const pd = toNum(projDevRow?.[projCol]);
-    const tot = toNum(totalRow?.[projCol]);
-    if (oh || cd || pd || tot) ntmProj = { overhead: oh, corpDev: cd, projDev: pd, total: tot };
-  }
+  console.log("[parseSheet] columns located:", {
+    pitchDeck: { col: pitchCol, header: pitchHeaderRaw },
+    ntmProjected: { col: projCol, header: projHeaderRaw },
+  });
+  console.log("[parseSheet] cost rows located:", {
+    overheadRow: !!overheadRow,
+    corpDevRow: !!corpDevRow,
+    projDevRow: !!projDevRow,
+    totalRow: !!totalRow,
+  });
 
-  return { months: months.filter(m => m.total > 0), reviewLabel, ntmProj };
-}
-
-// Sum pitch deck plan rows for a given list of months (matched by year+month key).
-function sumPlanForMonths(monthsList: { month: string }[], planMonths: PlanMonth[]) {
-  const planMap = new Map<string, PlanMonth>();
-  for (const p of planMonths) {
-    const d = parseMonthLabel(p.month);
-    if (d) planMap.set(`${d.getFullYear()}-${d.getMonth()}`, p);
-  }
-  let overhead = 0, corpDev = 0, projDev = 0, total = 0;
-  for (const m of monthsList) {
-    const d = parseMonthLabel(m.month);
-    const key = d ? `${d.getFullYear()}-${d.getMonth()}` : "";
-    const plan = planMap.get(key);
-    if (plan) {
-      overhead += plan.overhead;
-      corpDev += plan.corpDev;
-      projDev += plan.projDev;
-      total += plan.total;
+  const readCol = (col: number | null, label: string): PitchDeck | null => {
+    if (col === null) {
+      console.warn(`[parseSheet] ${label}: column not found in CSV`);
+      return null;
     }
-  }
-  return { overhead, corpDev, projDev, total };
+    const oh = toNum(overheadRow?.[col]);
+    const cd = toNum(corpDevRow?.[col]);
+    const pd = toNum(projDevRow?.[col]);
+    const tot = toNum(totalRow?.[col]);
+    console.log(`[parseSheet] ${label} (col ${col}):`, {
+      overhead: oh, corpDev: cd, projDev: pd, total: tot,
+      rawCells: {
+        overhead: overheadRow?.[col],
+        corpDev: corpDevRow?.[col],
+        projDev: projDevRow?.[col],
+        total: totalRow?.[col],
+      },
+    });
+    if (!oh && !cd && !pd && !tot) return null;
+    return { overhead: oh, corpDev: cd, projDev: pd, total: tot };
+  };
+  const pitchDeck = readCol(pitchCol, "Pitch Deck");
+  const ntmProj = readCol(projCol, "NTM Projected");
+
+  return { months: months.filter(m => m.total > 0), reviewLabel, pitchDeck, ntmProj };
 }
 
 // ══════════════════════════════════════════════
@@ -295,6 +316,7 @@ export default function Dashboard() {
   const [tab, setTab] = useState("overview");
   const [months, setMonths] = useState<MonthData[]>([]);
   const [reviewLabel, setReviewLabel] = useState("");
+  const [pitchDeck, setPitchDeck] = useState<PitchDeck | null>(null);
   const [ntmProj, setNtmProj] = useState<PitchDeck | null>(null);
   const [planMonths, setPlanMonths] = useState<PlanMonth[]>([]);
   const [loading, setLoading] = useState(true);
@@ -318,6 +340,7 @@ export default function Dashboard() {
       const planParsed = parsePlanSheet(planText);
       setMonths(parsed.months);
       setReviewLabel(parsed.reviewLabel);
+      setPitchDeck(parsed.pitchDeck);
       setNtmProj(parsed.ntmProj);
       setPlanMonths(planParsed.planMonths);
       setErr(null);
@@ -340,7 +363,13 @@ export default function Dashboard() {
     projDev: actuals.reduce((s, m) => s + m.projDev, 0),
     total: actuals.reduce((s, m) => s + m.total, 0),
   };
-  const ytdPlan = useMemo(() => sumPlanForMonths(actuals, planMonths), [actuals, planMonths]);
+  const ytdPlanRatio = actuals.length / (months.length || 1);
+  const ytdPlan = {
+    overhead: Math.round(PLAN.overhead * ytdPlanRatio),
+    corpDev: Math.round(PLAN.corpDev * ytdPlanRatio),
+    projDev: Math.round(PLAN.projDev * ytdPlanRatio),
+    total: Math.round(PLAN.total * ytdPlanRatio),
+  };
   // ── Overview: next 12 projected months (after last actual) ──
   const overviewData = useMemo(() => {
     return months.filter(m => !m.actual).slice(0, 12);
@@ -351,7 +380,6 @@ export default function Dashboard() {
     projDev:  overviewData.reduce((s, m) => s + m.projDev,  0),
     total:    overviewData.reduce((s, m) => s + m.total,    0),
   }), [overviewData]);
-  const ntmPitchDeck = useMemo(() => sumPlanForMonths(overviewData, planMonths), [overviewData, planMonths]);
 
   const cumData = useMemo(() => {
     const visible = [
@@ -560,9 +588,9 @@ export default function Dashboard() {
             </div>
             <div style={{ flex: "1 1 340px", minWidth: 340, display: "flex", flexDirection: "column", gap: 12 }}>
               {([
-                { label: "Corporate Overhead", val: ntmProj?.overhead ?? ntmTotals.overhead, plan: ntmPitchDeck.overhead, color: C.blue, desc: "Payroll, insurance, travel, admin, office, recruiting" },
-                { label: "Corporate Development", val: ntmProj?.corpDev ?? ntmTotals.corpDev, plan: ntmPitchDeck.corpDev, color: C.purple, desc: "Legal (fundraise), design & branding, SEO" },
-                { label: "Project Development", val: ntmProj?.projDev ?? ntmTotals.projDev, plan: ntmPitchDeck.projDev, color: C.green, desc: "Engineering, architect, legal, DD, broker, land carry" },
+                { label: "Corporate Overhead", val: ntmProj?.overhead ?? ntmTotals.overhead, plan: pitchDeck?.overhead || PITCH_DECK_FALLBACK.overhead, color: C.blue, desc: "Payroll, insurance, travel, admin, office, recruiting" },
+                { label: "Corporate Development", val: ntmProj?.corpDev ?? ntmTotals.corpDev, plan: pitchDeck?.corpDev || PITCH_DECK_FALLBACK.corpDev, color: C.purple, desc: "Legal (fundraise), design & branding, SEO" },
+                { label: "Project Development", val: ntmProj?.projDev ?? ntmTotals.projDev, plan: pitchDeck?.projDev || PITCH_DECK_FALLBACK.projDev, color: C.green, desc: "Engineering, architect, legal, DD, broker, land carry" },
               ]).map((item, i) => {
                 const v = item.val - item.plan;
                 return (
