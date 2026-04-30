@@ -449,7 +449,7 @@ function KPI({ label, value, sub, color, good }: { label: string; value: string;
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: `1px solid ${C.blue}`, borderRadius: 12, padding: "22px 24px", flex: 1, minWidth: 190, textAlign: "center", boxShadow: `inset 0 1px 0 ${C.blue}33` }}>
       <div style={{ fontSize: 32, fontWeight: 700, color: color || C.text, fontFamily: "monospace", lineHeight: 1.05 }}>{value}</div>
-      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: C.muted, marginTop: 10, fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: C.text, marginTop: 10, fontWeight: 600 }}>{label}</div>
       {sub && <div style={{ fontSize: 11, color: good === true ? C.green : good === false ? C.red : C.muted, marginTop: 4 }}>{sub}</div>}
     </div>
   );
@@ -542,8 +542,15 @@ export default function Dashboard() {
       ...months.filter(m => m.actual),
       ...months.filter(m => !m.actual).slice(0, 12),
     ];
+    // Accumulate including June '25 so its spend rolls into July's cumulative...
     let cum = 0;
-    return visible.map(d => { cum += d.total; return { ...d, cumulative: Math.round(cum) }; });
+    const withCum = visible.map(d => { cum += d.total; return { ...d, cumulative: Math.round(cum) }; });
+    // ...then hide the June '25 row from the chart display.
+    return withCum.filter(d => {
+      const date = parseMonthLabel(d.month);
+      if (!date) return true;
+      return !(date.getFullYear() === 2025 && date.getMonth() === 5);
+    });
   }, [months]);
 
   // ── Next 2 months data ──
@@ -737,7 +744,7 @@ export default function Dashboard() {
           <Section>NTM Spend Projections</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
             <ResponsiveContainer width="100%" height={380}>
-              <ComposedChart data={overviewData} margin={{ top: 32, right: 20, left: 10, bottom: 0 }}>
+              <ComposedChart data={overviewData} margin={{ top: 48, right: 20, left: 10, bottom: 0 }}>
                 <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 11, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
                 <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
@@ -745,7 +752,7 @@ export default function Dashboard() {
                 <Bar dataKey="overhead" name="Corp Overhead" stackId="a" fill={C.blue} />
                 <Bar dataKey="corpDev" name="Corp Dev" stackId="a" fill={C.purple} />
                 <Bar dataKey="projDev" name="Project Dev" stackId="a" fill={C.green} radius={[3, 3, 0, 0] as [number, number, number, number]}>
-                  <LabelList dataKey="total" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.text, fontSize: 11, fontFamily: "monospace", fontWeight: 600 }} />
+                  <LabelList dataKey="total" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.text, fontSize: 20, fontFamily: "monospace", fontWeight: 600 }} />
                 </Bar>
                 <Line type="monotone" dataKey="total" name="Total" stroke="#fff" strokeWidth={1.5} dot={false} strokeDasharray="4 3" />
               </ComposedChart>
@@ -754,13 +761,13 @@ export default function Dashboard() {
           <Section>Cumulative Spend</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
             <ResponsiveContainer width="100%" height={320}>
-              <AreaChart data={cumData} margin={{ top: 28, right: 20, left: 10, bottom: 0 }}>
+              <AreaChart data={cumData} margin={{ top: 44, right: 20, left: 10, bottom: 0 }}>
                 <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.blue} stopOpacity={0.3} /><stop offset="95%" stopColor={C.blue} stopOpacity={0} /></linearGradient></defs>
                 <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 11, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
                 <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
                 <Area type="monotone" dataKey="cumulative" name="Cumulative" stroke={C.blue} fill="url(#cg)" strokeWidth={2}>
-                  <LabelList dataKey="cumulative" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.text, fontSize: 9, fontFamily: "monospace", fontWeight: 600 }} />
+                  <LabelList dataKey="cumulative" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.text, fontSize: 20, fontFamily: "monospace", fontWeight: 600 }} />
                 </Area>
               </AreaChart>
             </ResponsiveContainer>
