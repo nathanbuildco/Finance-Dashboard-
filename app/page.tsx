@@ -129,7 +129,7 @@ function parsePlanSheet(csv: string): { planMonths: PlanMonth[] } {
   return { planMonths };
 }
 
-function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; pitchDeck: PitchDeck | null } {
+function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; pitchDeck: PitchDeck | null; ntmProj: PitchDeck | null } {
   const rows = parseCSV(csv);
 
   // Find month label row
@@ -185,22 +185,27 @@ function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; pi
       payroll: Math.round(pr),
     });
   }
-  // Find "NTM Pitch Deck" column in the same header row and read cost-row values from it
+  // Find "NTM Projected" and "NTM Pitch Deck" summary columns in the same header row
   let pitchCol: number | null = null;
+  let projCol: number | null = null;
   for (let c = 0; c < monthLabelRow.length; c++) {
     const cell = (monthLabelRow[c] || "").toLowerCase().replace(/\s+/g, " ").trim();
-    if (cell.includes("pitch deck")) { pitchCol = c; break; }
+    if (pitchCol === null && cell.includes("pitch deck")) pitchCol = c;
+    if (projCol === null && cell.includes("ntm projected")) projCol = c;
   }
-  let pitchDeck: PitchDeck | null = null;
-  if (pitchCol !== null) {
-    const oh = toNum(overheadRow?.[pitchCol]);
-    const cd = toNum(corpDevRow?.[pitchCol]);
-    const pd = toNum(projDevRow?.[pitchCol]);
-    const tot = toNum(totalRow?.[pitchCol]);
-    if (oh || cd || pd || tot) pitchDeck = { overhead: oh, corpDev: cd, projDev: pd, total: tot };
-  }
+  const readCol = (col: number | null): PitchDeck | null => {
+    if (col === null) return null;
+    const oh = toNum(overheadRow?.[col]);
+    const cd = toNum(corpDevRow?.[col]);
+    const pd = toNum(projDevRow?.[col]);
+    const tot = toNum(totalRow?.[col]);
+    if (!oh && !cd && !pd && !tot) return null;
+    return { overhead: oh, corpDev: cd, projDev: pd, total: tot };
+  };
+  const pitchDeck = readCol(pitchCol);
+  const ntmProj = readCol(projCol);
 
-  return { months: months.filter(m => m.total > 0), reviewLabel, pitchDeck };
+  return { months: months.filter(m => m.total > 0), reviewLabel, pitchDeck, ntmProj };
 }
 
 // ══════════════════════════════════════════════
@@ -274,6 +279,7 @@ export default function Dashboard() {
   const [months, setMonths] = useState<MonthData[]>([]);
   const [reviewLabel, setReviewLabel] = useState("");
   const [pitchDeck, setPitchDeck] = useState<PitchDeck | null>(null);
+  const [ntmProj, setNtmProj] = useState<PitchDeck | null>(null);
   const [planMonths, setPlanMonths] = useState<PlanMonth[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -297,6 +303,7 @@ export default function Dashboard() {
       setMonths(parsed.months);
       setReviewLabel(parsed.reviewLabel);
       setPitchDeck(parsed.pitchDeck);
+      setNtmProj(parsed.ntmProj);
       setPlanMonths(planParsed.planMonths);
       setErr(null);
     } catch (e: any) {
@@ -543,11 +550,11 @@ export default function Dashboard() {
             </div>
             <div style={{ flex: "1 1 340px", minWidth: 340, display: "flex", flexDirection: "column", gap: 12 }}>
               {([
-                { label: "Corporate Overhead", val: ntmTotals.overhead, plan: pitchDeck?.overhead ?? PLAN.overhead, color: C.blue, desc: "Payroll, insurance, travel, admin, office, recruiting" },
-                { label: "Corporate Development", val: ntmTotals.corpDev, plan: pitchDeck?.corpDev ?? PLAN.corpDev, color: C.purple, desc: "Legal (fundraise), design & branding, SEO" },
-                { label: "Project Development", val: ntmTotals.projDev, plan: pitchDeck?.projDev ?? PLAN.projDev, color: C.green, desc: "Engineering, architect, legal, DD, broker, land carry" },
+                { label: "Corporate Overhead", val: ntmProj?.overhead ?? ntmTotals.overhead, plan: pitchDeck?.overhead ?? PLAN.overhead, color: C.blue, desc: "Payroll, insurance, travel, admin, office, recruiting" },
+                { label: "Corporate Development", val: ntmProj?.corpDev ?? ntmTotals.corpDev, plan: pitchDeck?.corpDev ?? PLAN.corpDev, color: C.purple, desc: "Legal (fundraise), design & branding, SEO" },
+                { label: "Project Development", val: ntmProj?.projDev ?? ntmTotals.projDev, plan: pitchDeck?.projDev ?? PLAN.projDev, color: C.green, desc: "Engineering, architect, legal, DD, broker, land carry" },
               ]).map((item, i) => {
-                const v = item.plan - item.val;
+                const v = item.val - item.plan;
                 return (
                   <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 20px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -560,8 +567,8 @@ export default function Dashboard() {
                       </div>
                       <div style={{ textAlign: "right" }}>
                         <div style={{ fontFamily: "monospace", fontWeight: 600, fontSize: 16 }}>{fmt(item.val)}</div>
-                        <div style={{ fontSize: 11, color: v >= 0 ? C.green : C.red, fontFamily: "monospace" }}>
-                          {v >= 0 ? "▼" : "▲"} {fmt(Math.abs(v))} vs plan
+                        <div style={{ fontSize: 11, color: v <= 0 ? C.green : C.red, fontFamily: "monospace" }}>
+                          {v <= 0 ? "▼" : "▲"} {fmt(Math.abs(v))} vs plan
                         </div>
                       </div>
                     </div>
