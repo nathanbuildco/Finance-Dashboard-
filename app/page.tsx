@@ -17,6 +17,91 @@ const SHEET_CSV_URL =
 const PLAN_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTlUqIymbq_OgJ70EoO2uARD86PqF5vKmG_CzYTyzSzxdEXGTtk3mgRf7NhecnaXjhdTpyor_e3-NJ5/pub?gid=1750179845&single=true&output=csv";
 
+// Summary/rollup row labels excluded when computing top line-item expenses.
+const SUMMARY_ROW_LABELS = new Set([
+  // Category rollups
+  "total costs",
+  "corporate overhead costs",
+  "corporate development costs",
+  "project development costs",
+  // Job titles / roles in the Employee Payroll Table
+  "managing director",
+  "director of partnerships",
+  "associate",
+  "director of construction",
+  "analyst",
+  "project manager",
+  "head of ops",
+  "ea",
+  "controller",
+  "cfo",
+  "md of acq",
+  // Specific people
+  "lisa surnow",
+  // Payroll table headers / section labels
+  "employee payroll table",
+  "total headcount",
+  "average cost",
+  "payroll",
+  "total insurance",
+  "recruiting",
+  "role",
+  "start date",
+  "salary",
+  "insurance cost",
+  "bonus",
+  "1st bonus date",
+  // Config / meta rows
+  "go forward spend",
+  "projected cash",
+  "last day of month review",
+  "ntm end",
+  "number of months",
+]);
+
+// Common business words that must NOT be flagged as a person's name (so "Land Carry",
+// "Travel Cost", etc. survive the name pattern filter).
+const BUSINESS_TERMS = new Set([
+  "land", "carry", "carrying", "travel", "office", "admin", "legal", "engineering",
+  "insurance", "lease", "rent", "cost", "costs", "fee", "fees", "tax", "taxes",
+  "marketing", "subscription", "subscriptions", "software", "hardware", "equipment",
+  "supplies", "utilities", "depreciation", "amortization", "interest", "principal",
+  "loan", "debt", "equity", "salary", "payroll", "bonus", "benefits", "holding",
+  "deposit", "deposits", "permit", "permits", "construction", "contract", "service",
+  "services", "consulting", "accounting", "architecture", "planning", "brokerage",
+  "recruiting", "total", "subtotal", "sum", "expense", "expenses", "development",
+  "corporate", "project", "headcount",
+]);
+
+function isPersonName(label: string): boolean {
+  const parts = label.trim().split(/\s+/);
+  if (parts.length < 2 || parts.length > 3) return false;
+  if (!parts.every(p => /^[A-Z][a-z]+$/.test(p))) return false;
+  if (parts.some(p => BUSINESS_TERMS.has(p.toLowerCase()))) return false;
+  return true;
+}
+
+function tokenize(s: string): string[] {
+  return s.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+// Pre-tokenize the exclude set once at module load.
+const SUMMARY_ROW_TOKENS = Array.from(SUMMARY_ROW_LABELS).map(tokenize);
+
+function isExcludedLabel(label: string): boolean {
+  const lower = label.toLowerCase().trim();
+  if (lower.includes("replaced")) return true;
+  if (isPersonName(label)) return true;
+  const labelTokens = tokenize(label);
+  if (labelTokens.length === 0) return true;
+  for (const excludedTokens of SUMMARY_ROW_TOKENS) {
+    if (excludedTokens.length === 0) continue;
+    if (excludedTokens.length > labelTokens.length) continue;
+    if (excludedTokens.every((t, i) => labelTokens[i] === t)) return true;
+  }
+  return false;
+}
+
 const PLAN = {
   overhead: 2633667, corpDev: 416667, projDev: 6687500, total: 9737833,
 };
@@ -88,6 +173,7 @@ function parseMonthLabel(label: string): Date | null {
 
 interface PitchDeck { overhead: number; corpDev: number; projDev: number; total: number }
 interface PlanMonth { month: string; overhead: number; corpDev: number; projDev: number; total: number; fixedExpenses: number }
+interface LineItem { label: string; monthly: Record<string, number> }
 
 function parsePlanSheet(csv: string): { planMonths: PlanMonth[] } {
   const rows = parseCSV(csv);
@@ -145,7 +231,7 @@ function parsePlanSheet(csv: string): { planMonths: PlanMonth[] } {
   return { planMonths };
 }
 
-function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; pitchDeck: PitchDeck | null; ntmProj: PitchDeck | null } {
+function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; pitchDeck: PitchDeck | null; ntmProj: PitchDeck | null; lineItems: LineItem[] } {
   const rows = parseCSV(csv);
 
   // Find month label row
@@ -266,7 +352,30 @@ function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; pi
   const pitchDeck = readCol(pitchCol, "Pitch Deck");
   const ntmProj = readCol(projCol, "NTM Projected");
 
-  return { months: months.filter(m => m.total > 0), reviewLabel, pitchDeck, ntmProj };
+  // Capture every populated row as a line item so we can rank top vendors.
+  // Month keys are normalized the same way MonthData.month is, so they line up later.
+  const lineItems: LineItem[] = [];
+  for (const row of rows) {
+    let label = "";
+    for (let c = 0; c < Math.min(row.length, 5); c++) {
+      const cell = (row[c] || "").trim();
+      if (cell) { label = cell; break; }
+    }
+    if (!label) continue;
+    if (/^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s*[''`']?\s*\d{2,4}/i.test(label)) continue;
+    if (label.toLowerCase().startsWith("ntm")) continue;
+    const monthly: Record<string, number> = {};
+    let hasValue = false;
+    for (const mc of monthCols) {
+      const v = toNum(row[mc.col]);
+      if (v !== 0) hasValue = true;
+      monthly[mc.label.replace(/[''`]/g, "'").replace(/\s+/g, " ").trim()] = v;
+    }
+    if (!hasValue) continue;
+    lineItems.push({ label, monthly });
+  }
+
+  return { months: months.filter(m => m.total > 0), reviewLabel, pitchDeck, ntmProj, lineItems };
 }
 
 // ══════════════════════════════════════════════
@@ -346,6 +455,7 @@ export default function Dashboard() {
   const [pitchDeck, setPitchDeck] = useState<PitchDeck | null>(null);
   const [ntmProj, setNtmProj] = useState<PitchDeck | null>(null);
   const [planMonths, setPlanMonths] = useState<PlanMonth[]>([]);
+  const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -366,6 +476,7 @@ export default function Dashboard() {
       setPitchDeck(parsed.pitchDeck);
       setNtmProj(parsed.ntmProj);
       setPlanMonths(planParsed.planMonths);
+      setLineItems(parsed.lineItems);
       setErr(null);
     } catch (e: any) {
       console.error(e);
@@ -501,6 +612,23 @@ export default function Dashboard() {
       };
     });
   }, [overviewData, planMonths]);
+
+  // ── Top 3 line-item expenses by NTM spend ──
+  // Skips category rollup rows (Total Costs, Corp Overhead Costs, Corp Dev Costs, Project Dev Costs).
+  // Captures monthly trend across the NTM window for the per-card sparkline.
+  const topExpenses = useMemo(() => {
+    if (overviewData.length === 0) return [];
+    return lineItems
+      .filter(li => !isExcludedLabel(li.label))
+      .map(li => {
+        const monthly = overviewData.map(m => li.monthly[m.month] || 0);
+        const ntmTotal = monthly.reduce((s, v) => s + v, 0);
+        return { label: li.label, ntmTotal, monthly };
+      })
+      .filter(v => v.ntmTotal > 0)
+      .sort((a, b) => b.ntmTotal - a.ntmTotal)
+      .slice(0, 3);
+  }, [lineItems, overviewData]);
 
   // ── Fixed Expenses (NTM): Projected vs Initial Plan ──
   const fixedExpensesData = useMemo(() => {
@@ -676,6 +804,58 @@ export default function Dashboard() {
               })}
             </div>
           </div>
+
+          {topExpenses.length > 0 && (
+            <>
+              <Section>Top 3 Expenses — NTM</Section>
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                {topExpenses.map((e, i) => {
+                  const pct = ntmTotals.total > 0 ? (e.ntmTotal / ntmTotals.total) * 100 : 0;
+                  const max = Math.max(...e.monthly);
+                  return (
+                    <div
+                      key={e.label}
+                      style={{
+                        background: C.card,
+                        border: `1px solid ${C.border}`,
+                        borderTop: `1px solid ${C.blue}`,
+                        borderRadius: 12,
+                        padding: "20px 24px",
+                        flex: "1 1 240px",
+                        minWidth: 240,
+                        boxShadow: `inset 0 1px 0 ${C.blue}33`,
+                        display: "flex",
+                        flexDirection: "column",
+                      }}
+                    >
+                      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: C.muted, marginBottom: 6 }}>
+                        #{i + 1}
+                      </div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>{e.label}</div>
+                      <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "monospace", color: C.blue, lineHeight: 1.1 }}>{fmt(e.ntmTotal)}</div>
+                      <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>{pct.toFixed(1)}% of NTM spend</div>
+                      <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 32, marginTop: 14 }}>
+                        {e.monthly.map((v, j) => (
+                          <div
+                            key={j}
+                            title={`${overviewData[j]?.month || ""}: ${fmt(v)}`}
+                            style={{
+                              flex: 1,
+                              height: max > 0 ? `${(v / max) * 100}%` : 0,
+                              minHeight: v > 0 ? 2 : 0,
+                              background: C.blue,
+                              opacity: 0.7,
+                              borderRadius: "2px 2px 0 0",
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </>
       )}
 
