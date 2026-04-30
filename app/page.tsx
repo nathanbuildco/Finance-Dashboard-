@@ -398,24 +398,37 @@ export default function Dashboard() {
   const next2 = projected.slice(0, 2);
 
   // ── Quarterly payroll data ──
+  // Annualized & FTE are taken from the LAST month of each quarter (run-rate convention),
+  // not averaged. Quarterly column stays as the sum of the months in the quarter.
   const quarterlyPayroll = useMemo(() => {
-    const qMap: Record<string, { payroll: number; hc: number; months: number }> = {};
+    const qMap: Record<string, {
+      payroll: number;
+      months: number;
+      lastDate: Date | null;
+      lastPayroll: number;
+      lastHc: number;
+    }> = {};
     for (const m of months) {
       const d = parseMonthLabel(m.month);
       if (!d) continue;
       const q = Math.floor(d.getMonth() / 3) + 1;
       const yr = d.getFullYear();
       const key = `Q${q} '${String(yr).slice(2)}`;
-      if (!qMap[key]) qMap[key] = { payroll: 0, hc: 0, months: 0 };
-      qMap[key].payroll += m.payroll || m.overhead;
-      qMap[key].hc = Math.max(qMap[key].hc, m.headcount);
+      if (!qMap[key]) qMap[key] = { payroll: 0, months: 0, lastDate: null, lastPayroll: 0, lastHc: 0 };
+      const monthPayroll = m.payroll || m.overhead;
+      qMap[key].payroll += monthPayroll;
       qMap[key].months++;
+      if (!qMap[key].lastDate || d > qMap[key].lastDate) {
+        qMap[key].lastDate = d;
+        qMap[key].lastPayroll = monthPayroll;
+        qMap[key].lastHc = m.headcount;
+      }
     }
     return Object.entries(qMap).map(([quarter, data]) => ({
       quarter,
-      annualized: Math.round((data.payroll / data.months) * 12),
+      annualized: Math.round(data.lastPayroll * 12),
       quarterly: Math.round(data.payroll),
-      fte: data.hc,
+      fte: data.lastHc,
     })).filter(q => q.quarter !== "Q2 '25");
   }, [months]);
 
