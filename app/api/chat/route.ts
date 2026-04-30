@@ -4,6 +4,8 @@ import { AUTH_COOKIE, isValidToken } from "@/app/lib/auth";
 
 const SHEET_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTlUqIymbq_OgJ70EoO2uARD86PqF5vKmG_CzYTyzSzxdEXGTtk3mgRf7NhecnaXjhdTpyor_e3-NJ5/pub?gid=634011599&single=true&output=csv";
+const VENDOR_MAP_CSV_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTlUqIymbq_OgJ70EoO2uARD86PqF5vKmG_CzYTyzSzxdEXGTtk3mgRf7NhecnaXjhdTpyor_e3-NJ5/pub?gid=678572461&single=true&output=csv";
 
 function parseCSV(text: string): string[][] {
   const rows: string[][] = [];
@@ -73,6 +75,36 @@ function parseAllLineItems(csvText: string): { monthLabels: string[]; lineItems:
   return { monthLabels, lineItems };
 }
 
+// Parse a generic CSV table where the first row is headers. Skips rows that are entirely empty.
+function parseTable(csvText: string): { headers: string[]; rows: Record<string, string>[] } {
+  const raw = parseCSV(csvText);
+  if (raw.length === 0) return { headers: [], rows: [] };
+
+  // First non-empty row becomes the header row.
+  let headerIdx = -1;
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i].some(c => c.trim())) { headerIdx = i; break; }
+  }
+  if (headerIdx === -1) return { headers: [], rows: [] };
+
+  const headers = raw[headerIdx].map(h => h.trim());
+  const rows: Record<string, string>[] = [];
+  for (let i = headerIdx + 1; i < raw.length; i++) {
+    const r = raw[i];
+    const obj: Record<string, string> = {};
+    let hasValue = false;
+    for (let c = 0; c < headers.length; c++) {
+      const key = headers[c];
+      if (!key) continue;
+      const val = (r[c] || "").trim();
+      obj[key] = val;
+      if (val) hasValue = true;
+    }
+    if (hasValue) rows.push(obj);
+  }
+  return { headers: headers.filter(Boolean), rows };
+}
+
 export async function POST(request: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -97,12 +129,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Question is required." }, { status: 400 });
   }
 
-  // Fetch the raw actuals/projections CSV ourselves so we get every populated row,
-  // not just the summary numbers the client sends. 5-min Next fetch cache keeps
-  // follow-up questions fast.
+  // Fetch both source CSVs in parallel, server-side, with 5-min Next fetch caching.
   let lineItemBlock = "(line item detail unavailable)";
+  let vendorMapBlock = "(vendor mapping unavailable)";
   try {
-    const csvRes = await fetch(SHEET_CSV_URL, { next: { revalidate: 300 } });
+    const [csvRes, vendorRes] = await Promise.all([
+      fetch(SHEET_CSV_URL, { next: { revalidate: 300 } }),
+      fetch(VENDOR_MAP_CSV_URL, { next: { revalidate: 300 } }),
+    ]);
+
     if (csvRes.ok) {
       const csv = await csvRes.text();
       const { monthLabels, lineItems } = parseAllLineItems(csv);
@@ -110,24 +145,37 @@ export async function POST(request: NextRequest) {
         `Month columns (in order, applies to every row's "values" array):\n${JSON.stringify(monthLabels)}\n\n` +
         `Line items (${lineItems.length} populated rows):\n${JSON.stringify(lineItems)}`;
     } else {
-      console.error("[chat] CSV fetch returned", csvRes.status);
+      console.error("[chat] actuals CSV fetch returned", csvRes.status);
+    }
+
+    if (vendorRes.ok) {
+      const vendorCsv = await vendorRes.text();
+      const { headers, rows } = parseTable(vendorCsv);
+      vendorMapBlock =
+        `Columns: ${JSON.stringify(headers)}\n` +
+        `Mappings (${rows.length} entries):\n${JSON.stringify(rows)}`;
+    } else {
+      console.error("[chat] vendor map CSV fetch returned", vendorRes.status);
     }
   } catch (e) {
-    console.error("[chat] Failed to fetch actuals CSV:", e);
+    console.error("[chat] Failed to fetch source CSVs:", e);
   }
 
-  const systemPrompt = `You are a financial analyst assistant for The Building Company. You have access to their financial projections data, INCLUDING vendor-level line item detail. Answer questions concisely about spending, costs, headcount, projections, and specific vendors. Use specific numbers from the data provided. When the user asks about a specific vendor (e.g. "how much are we spending on Dover Kohl in July?"), find the matching line item by label and quote the value for the month they asked about.
+  const systemPrompt = `You are a financial analyst assistant for The Building Company. You have access to:
+1. Vendor-level line item detail from the actuals/projections sheet — every populated row with its monthly values.
+2. A vendor mapping table that maps the abbreviations/codes used in the line items to full vendor names, categories, and subcategories.
 
-Vendor reference (common labels you'll see in the line items — match flexibly, the sheet may use abbreviations):
-- DK&P = Dover Kohl & Partners (architect / town planning)
-- Doucet = civil engineering
-- Kittelson = transportation engineering
-- Armbrust Brown = land use counsel
+Answer questions concisely about spending, costs, headcount, projections, and specific vendors. Use specific numbers from the data provided.
 
-Vendor-level line item detail (every populated row from the actuals + projections sheet, with monthly values):
+When the user asks about a vendor by their full name (e.g. "Dover Kohl"), use the vendor mapping table to find the corresponding label/abbreviation in the line item data (e.g. "DK&P"), then quote the exact monthly amount(s) for the month(s) they asked about. If a vendor doesn't appear in the mapping, do a fuzzy/substring match on the line item labels and explain your match.
+
+Vendor mapping table:
+${vendorMapBlock}
+
+Vendor-level line item detail (from the actuals + projections sheet):
 ${lineItemBlock}
 
-Summary rollups (computed by the dashboard, useful for NTM totals, YTD/ITD, plan variance):
+Summary rollups (computed by the dashboard, useful for NTM totals, ITD, plan variance):
 ${JSON.stringify(body.financialData ?? {}, null, 2)}`;
 
   const apiResponse = await fetch("https://api.anthropic.com/v1/messages", {
