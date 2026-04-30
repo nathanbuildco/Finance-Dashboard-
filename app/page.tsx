@@ -30,6 +30,7 @@ interface MonthData {
   month: string; overhead: number; corpDev: number; projDev: number;
   total: number; headcount: number; actual: boolean;
   payroll: number;
+  fixedExpenses: number;
 }
 
 // ══════════════════════════════════════════════
@@ -85,7 +86,7 @@ function parseMonthLabel(label: string): Date | null {
 }
 
 interface PitchDeck { overhead: number; corpDev: number; projDev: number; total: number }
-interface PlanMonth { month: string; overhead: number; corpDev: number; projDev: number; total: number }
+interface PlanMonth { month: string; overhead: number; corpDev: number; projDev: number; total: number; fixedExpenses: number }
 
 function parsePlanSheet(csv: string): { planMonths: PlanMonth[] } {
   const rows = parseCSV(csv);
@@ -116,6 +117,12 @@ function parsePlanSheet(csv: string): { planMonths: PlanMonth[] } {
     if (!projDevRow && t.includes("project development costs")) projDevRow = row;
   }
 
+  // Fixed expense sub-rows in the pitch deck plan tab — pinned to specific row indices.
+  const planPayrollRow   = rows[32] ?? null;  // sheet row 33
+  const planAdminRow     = rows[34] ?? null;  // sheet row 35
+  const planOfficeRow    = rows[35] ?? null;  // sheet row 36
+  const planLandCarryRow = rows[49] ?? null;  // sheet row 50
+
   const planMonths: PlanMonth[] = [];
   for (const mc of monthCols) {
     const c = mc.col;
@@ -123,10 +130,15 @@ function parsePlanSheet(csv: string): { planMonths: PlanMonth[] } {
     const oh = toNum(overheadRow?.[c]);
     const cd = toNum(corpDevRow?.[c]);
     const pd = toNum(projDevRow?.[c]);
+    const pr = toNum(planPayrollRow?.[c]);
+    const adm = toNum(planAdminRow?.[c]);
+    const off = toNum(planOfficeRow?.[c]);
+    const land = toNum(planLandCarryRow?.[c]);
     if (tot === 0 && oh === 0 && cd === 0 && pd === 0) continue;
     planMonths.push({
       month: mc.label.replace(/[''`]/g, "'").replace(/\s+/g, " ").trim(),
       overhead: Math.round(oh), corpDev: Math.round(cd), projDev: Math.round(pd), total: Math.round(tot),
+      fixedExpenses: Math.round(pr + adm + off + land),
     });
   }
   return { planMonths };
@@ -155,6 +167,12 @@ function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; pi
   const headcountRow = findRow(rows, "total headcount");
   const payrollRow = findRow(rows, "payroll");
 
+  // Fixed expense sub-rows — pinned to specific row indices in the actuals/projections sheet.
+  // Brittle if the sheet layout shifts, but matches what the user told us to look at.
+  const adminRow     = rows[75]  ?? null;  // sheet row 76
+  const officeRow    = rows[83]  ?? null;  // sheet row 84
+  const landCarryRow = rows[119] ?? null;  // sheet row 120
+
   let corpDevRow: string[] | null = null;
   let projDevRow: string[] | null = null;
   for (const row of rows) {
@@ -178,6 +196,9 @@ function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; pi
     const pd = toNum(projDevRow?.[c]);
     const hc = toNum(headcountRow?.[c]);
     const pr = toNum(payrollRow?.[c]);
+    const adm = toNum(adminRow?.[c]);
+    const off = toNum(officeRow?.[c]);
+    const land = toNum(landCarryRow?.[c]);
     if (tot === 0 && oh === 0 && cd === 0 && pd === 0) continue;
     const monthDate = parseMonthLabel(mc.label);
     const isActual = monthDate ? monthDate <= lastReviewDate : false;
@@ -186,6 +207,7 @@ function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; pi
       overhead: Math.round(oh), corpDev: Math.round(cd), projDev: Math.round(pd),
       total: Math.round(tot), headcount: Math.round(hc), actual: isActual,
       payroll: Math.round(pr),
+      fixedExpenses: Math.round(pr + adm + off + land),
     });
   }
   // Find "NTM Projected" and "NTM Pitch Deck" summary columns — scan ALL rows in case the
@@ -475,6 +497,25 @@ export default function Dashboard() {
     });
   }, [overviewData, planMonths]);
 
+  // ── Fixed Expenses (NTM): Projected vs Initial Plan ──
+  const fixedExpensesData = useMemo(() => {
+    const planMap = new Map<string, PlanMonth>();
+    for (const p of planMonths) {
+      const d = parseMonthLabel(p.month);
+      if (d) planMap.set(`${d.getFullYear()}-${d.getMonth()}`, p);
+    }
+    return overviewData.map(m => {
+      const d = parseMonthLabel(m.month);
+      const key = d ? `${d.getFullYear()}-${d.getMonth()}` : "";
+      const plan = planMap.get(key)?.fixedExpenses ?? 0;
+      return {
+        month: m.month,
+        projected: m.fixedExpenses,
+        plan,
+      };
+    });
+  }, [overviewData, planMonths]);
+
   // ── Loading / Error ──
   if (loading) return (
     <div style={{ background: C.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: C.text }}>
@@ -505,6 +546,7 @@ export default function Dashboard() {
     { id: "cashneeds", label: "Cash Needs" },
     { id: "payroll", label: "Payroll" },
     { id: "projvsplan", label: "Proj vs Plan" },
+    { id: "fixed", label: "Fixed Expenses" },
   ];
 
   return (
@@ -878,6 +920,43 @@ export default function Dashboard() {
           })()}
         </>
       )}
+
+      {/* ═══════════ FIXED EXPENSES (NEW) ═══════════ */}
+      {tab === "fixed" && (() => {
+        const ntmProjFixed = fixedExpensesData.reduce((s, m) => s + m.projected, 0);
+        const ntmPlanFixed = fixedExpensesData.reduce((s, m) => s + m.plan, 0);
+        const variance = ntmProjFixed - ntmPlanFixed;
+        const sub = ntmPlanFixed > 0
+          ? (variance <= 0 ? `${fmt(Math.abs(variance))} under plan` : `${fmt(variance)} over plan`)
+          : undefined;
+        return (
+          <>
+            <Section>Run Rate: Fixed Expenses vs. Initial Plan (NTM)</Section>
+            <div style={{ display: "flex", gap: 14, marginBottom: 16, flexWrap: "wrap" }}>
+              <KPI label="NTM Projected Fixed Expenses" value={fmt(ntmProjFixed)} sub={sub} good={variance <= 0} />
+            </div>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
+              <ResponsiveContainer width="100%" height={420}>
+                <BarChart data={fixedExpensesData} margin={{ top: 36, right: 20, left: 10, bottom: 0 }}>
+                  <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 11, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} />
+                  <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="projected" name="Projected Fixed Expenses" fill={C.blue} radius={[3, 3, 0, 0] as [number, number, number, number]}>
+                    <LabelList dataKey="projected" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.blue, fontSize: 10, fontFamily: "monospace", fontWeight: 600 }} />
+                  </Bar>
+                  <Bar dataKey="plan" name="Initial Plan Fixed Expenses" fill="rgba(255,255,255,0.25)" radius={[3, 3, 0, 0] as [number, number, number, number]}>
+                    <LabelList dataKey="plan" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.muted, fontSize: 10, fontFamily: "monospace", fontWeight: 600 }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div style={{ marginTop: 12, fontSize: 11, color: C.muted, fontStyle: "italic" }}>
+              * Fixed expenses includes: payroll, admin, office, and land carry.
+            </div>
+          </>
+        );
+      })()}
 
       {/* FOOTER */}
       <div style={{ marginTop: 40, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, fontSize: 11, color: C.muted, flexWrap: "wrap" }}>
