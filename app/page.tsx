@@ -306,10 +306,14 @@ const C = {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const ChartTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
+  // Surface plan/baseline rows first (any dataKey containing "plan") so they read above
+  // the projected/actual rows in tooltips.
+  const isPlan = (k: string) => typeof k === "string" && k.toLowerCase().includes("plan");
+  const sorted = [...payload].sort((a, b) => Number(isPlan(b.dataKey)) - Number(isPlan(a.dataKey)));
   return (
     <div style={{ background: "#1a1f2e", border: "1px solid #2a3040", borderRadius: 8, padding: "12px 16px", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
       <p style={{ color: C.text, fontWeight: 600, marginBottom: 6, fontSize: 13 }}>{label}</p>
-      {payload.map((p: any, i: number) => (
+      {sorted.map((p: any, i: number) => (
         <p key={i} style={{ color: p.color, fontSize: 12, margin: "3px 0", fontFamily: "monospace" }}>{p.name}: {p.dataKey === "headcount" || p.dataKey === "fte" ? p.value : fmtFull(p.value)}</p>
       ))}
     </div>
@@ -858,10 +862,10 @@ export default function Dashboard() {
       {/* ═══════════ PROJECTED VS PLAN (NEW) ═══════════ */}
       {tab === "projvsplan" && (
         <>
-          <Section>Monthly Projected Spend vs Initial Plan</Section>
+          <Section>NTM Monthly Spend: Projected vs. Plan</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
             <ResponsiveContainer width="100%" height={340}>
-              <ComposedChart data={projVsPlanData} margin={{ top: 36, right: 20, left: 10, bottom: 0 }}>
+              <ComposedChart data={projVsPlanData} margin={{ top: 50, right: 20, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
                 <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 11, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
                 <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
@@ -870,14 +874,14 @@ export default function Dashboard() {
                 <Bar dataKey="projected" name="Projected Spend" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={20}>
                   <LabelList dataKey="projected" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.blue, fontSize: 10, fontFamily: "monospace", fontWeight: 600 }} />
                 </Bar>
-                <Line type="monotone" dataKey="plan" name="Pitch Deck Plan" stroke={C.orange} strokeWidth={2} strokeDasharray="6 3" dot={false}>
-                  <LabelList dataKey="plan" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.orange, fontSize: 10, fontFamily: "monospace", fontWeight: 600 }} />
+                <Line type="monotone" dataKey="plan" name="Plan" stroke={C.orange} strokeWidth={2} strokeDasharray="6 3" dot={false}>
+                  <LabelList dataKey="plan" position="top" offset={18} formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.orange, fontSize: 10, fontFamily: "monospace", fontWeight: 600 }} />
                 </Line>
               </ComposedChart>
             </ResponsiveContainer>
           </div>
 
-          <Section>Cumulative: Projected vs Plan</Section>
+          <Section>NTM Cumulative Spend: Projected vs. Plan</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
             <ResponsiveContainer width="100%" height={300}>
               <AreaChart data={projVsPlanData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
@@ -905,11 +909,11 @@ export default function Dashboard() {
             return (
               <div style={{ marginTop: 16, display: "flex", gap: 16, flexWrap: "wrap" }}>
                 <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", flex: 1, minWidth: 200 }}>
-                  <div style={{ fontSize: 11, textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>NTM Plan</div>
+                  <div style={{ fontSize: 11, textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>NTM Spend: Plan</div>
                   <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "monospace" }}>{fmt(planTotal)}</div>
                 </div>
                 <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", flex: 1, minWidth: 200 }}>
-                  <div style={{ fontSize: 11, textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>NTM Projected</div>
+                  <div style={{ fontSize: 11, textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>NTM Spend: Projected</div>
                   <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "monospace", color: projTotal > planTotal ? C.red : C.green }}>{fmt(projTotal)}</div>
                 </div>
                 <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", flex: 1, minWidth: 200 }}>
