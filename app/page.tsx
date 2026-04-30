@@ -7,6 +7,7 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Line, LabelList
 } from "recharts";
 import { logout } from "./actions/auth";
+import ChatWidget from "./chat-widget";
 
 // ══════════════════════════════════════════════
 // CONFIG
@@ -978,6 +979,19 @@ export default function Dashboard() {
           </form>
         </div>
       </div>
+
+      <ChatWidget financialData={{
+        reviewLabel,
+        months,
+        planMonths,
+        ntmTotals,
+        pitchDeck,
+        itd,
+        itdPlan,
+        nextQuarterPayroll,
+        quarterlyPayroll,
+        fixedExpensesData,
+      }} />
     </div>
   );
 }
