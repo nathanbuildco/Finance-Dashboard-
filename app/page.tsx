@@ -382,6 +382,12 @@ export default function Dashboard() {
     projDev:  overviewData.reduce((s, m) => s + m.projDev,  0),
     total:    overviewData.reduce((s, m) => s + m.total,    0),
   }), [overviewData]);
+  const headcountData = useMemo(() =>
+    overviewData.map(m => ({
+      ...m,
+      avgCost: m.headcount > 0 ? Math.round(m.payroll / m.headcount) : 0,
+    })),
+  [overviewData]);
 
   const cumData = useMemo(() => {
     const visible = [
@@ -677,18 +683,19 @@ export default function Dashboard() {
       {/* ═══════════ HEADCOUNT ═══════════ */}
       {tab === "headcount" && (
         <>
-          <Section>Headcount Ramp + Overhead Cost</Section>
+          <Section>NTM Monthly Payroll Cost/Headcount</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
-            <ResponsiveContainer width="100%" height={300}>
-              <ComposedChart data={months} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
-                <XAxis dataKey="month" tick={{ fill: C.muted, fontSize: 9, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
-                <YAxis yAxisId="hc" tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} axisLine={false} />
-                <YAxis yAxisId="cost" orientation="right" tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
+            <ResponsiveContainer width="100%" height={340}>
+              <ComposedChart data={headcountData} margin={{ top: 32, right: 20, left: 10, bottom: 0 }}>
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 11, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+                <YAxis yAxisId="cost" tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} domain={[0, 30000]} />
+                <YAxis yAxisId="hc" orientation="right" tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} axisLine={false} allowDecimals={false} domain={[0, 15]} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar yAxisId="hc" dataKey="headcount" name="Headcount" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={24} opacity={0.6} />
-                <Line yAxisId="cost" type="monotone" dataKey="overhead" name="Corp Overhead" stroke={C.orange} strokeWidth={2} dot={{ fill: C.orange, r: 3 }} />
+                <Bar yAxisId="cost" dataKey="avgCost" name="Avg Cost / Employee" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={24} opacity={0.7}>
+                  <LabelList dataKey="avgCost" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.text, fontSize: 11, fontFamily: "monospace", fontWeight: 600 }} />
+                </Bar>
+                <Line yAxisId="hc" type="monotone" dataKey="headcount" name="Headcount" stroke={C.orange} strokeWidth={2} dot={{ fill: C.orange, r: 3 }} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
