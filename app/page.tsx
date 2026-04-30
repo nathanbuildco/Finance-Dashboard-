@@ -13,6 +13,8 @@ import { logout } from "./actions/auth";
 // ══════════════════════════════════════════════
 const SHEET_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTlUqIymbq_OgJ70EoO2uARD86PqF5vKmG_CzYTyzSzxdEXGTtk3mgRf7NhecnaXjhdTpyor_e3-NJ5/pub?gid=634011599&single=true&output=csv";
+const PLAN_CSV_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTlUqIymbq_OgJ70EoO2uARD86PqF5vKmG_CzYTyzSzxdEXGTtk3mgRf7NhecnaXjhdTpyor_e3-NJ5/pub?gid=1750179845&single=true&output=csv";
 
 const PLAN = {
   overhead: 2633667, corpDev: 416667, projDev: 6687500, total: 9737833,
@@ -80,6 +82,52 @@ function parseMonthLabel(label: string): Date | null {
 }
 
 interface PitchDeck { overhead: number; corpDev: number; projDev: number; total: number }
+interface PlanMonth { month: string; overhead: number; corpDev: number; projDev: number; total: number }
+
+function parsePlanSheet(csv: string): { planMonths: PlanMonth[] } {
+  const rows = parseCSV(csv);
+
+  let monthLabelRow: string[] | null = null;
+  const monthCols: { col: number; label: string }[] = [];
+  for (const row of rows) {
+    const tempCols: { col: number; label: string }[] = [];
+    for (let c = 0; c < row.length; c++) {
+      const cell = (row[c] || "").trim();
+      if (/^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s*[''`']?\s*\d{2,4}/i.test(cell)) {
+        tempCols.push({ col: c, label: cell.replace(/\s+/g, " ") });
+      }
+    }
+    if (tempCols.length >= 6) { monthLabelRow = row; monthCols.push(...tempCols); break; }
+  }
+  if (!monthLabelRow) return { planMonths: [] };
+
+  let totalRow: string[] | null = null;
+  let overheadRow: string[] | null = null;
+  let corpDevRow: string[] | null = null;
+  let projDevRow: string[] | null = null;
+  for (const row of rows) {
+    const t = row.slice(0, 4).join(" ").toLowerCase().replace(/\s+/g, " ").trim();
+    if (!totalRow && t.includes("total costs")) totalRow = row;
+    if (!overheadRow && t.includes("corporate overhead costs")) overheadRow = row;
+    if (!corpDevRow && t.includes("corporate development costs")) corpDevRow = row;
+    if (!projDevRow && t.includes("project development costs")) projDevRow = row;
+  }
+
+  const planMonths: PlanMonth[] = [];
+  for (const mc of monthCols) {
+    const c = mc.col;
+    const tot = toNum(totalRow?.[c]);
+    const oh = toNum(overheadRow?.[c]);
+    const cd = toNum(corpDevRow?.[c]);
+    const pd = toNum(projDevRow?.[c]);
+    if (tot === 0 && oh === 0 && cd === 0 && pd === 0) continue;
+    planMonths.push({
+      month: mc.label.replace(/[''`]/g, "'").replace(/\s+/g, " ").trim(),
+      overhead: Math.round(oh), corpDev: Math.round(cd), projDev: Math.round(pd), total: Math.round(tot),
+    });
+  }
+  return { planMonths };
+}
 
 function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; pitchDeck: PitchDeck | null } {
   const rows = parseCSV(csv);
@@ -226,6 +274,7 @@ export default function Dashboard() {
   const [months, setMonths] = useState<MonthData[]>([]);
   const [reviewLabel, setReviewLabel] = useState("");
   const [pitchDeck, setPitchDeck] = useState<PitchDeck | null>(null);
+  const [planMonths, setPlanMonths] = useState<PlanMonth[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -236,13 +285,19 @@ export default function Dashboard() {
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(SHEET_CSV_URL);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const text = await res.text();
-      const parsed = parseSheet(text);
+      const [actualsRes, planRes] = await Promise.all([
+        fetch(SHEET_CSV_URL),
+        fetch(PLAN_CSV_URL),
+      ]);
+      if (!actualsRes.ok) throw new Error(`HTTP ${actualsRes.status} (actuals)`);
+      if (!planRes.ok) throw new Error(`HTTP ${planRes.status} (plan)`);
+      const [actualsText, planText] = await Promise.all([actualsRes.text(), planRes.text()]);
+      const parsed = parseSheet(actualsText);
+      const planParsed = parsePlanSheet(planText);
       setMonths(parsed.months);
       setReviewLabel(parsed.reviewLabel);
       setPitchDeck(parsed.pitchDeck);
+      setPlanMonths(planParsed.planMonths);
       setErr(null);
     } catch (e: any) {
       console.error(e);
@@ -263,12 +318,6 @@ export default function Dashboard() {
     projDev: actuals.reduce((s, m) => s + m.projDev, 0),
     total: actuals.reduce((s, m) => s + m.total, 0),
   };
-  const totalProjected = {
-    overhead: months.reduce((s, m) => s + m.overhead, 0),
-    corpDev: months.reduce((s, m) => s + m.corpDev, 0),
-    projDev: months.reduce((s, m) => s + m.projDev, 0),
-    total: months.reduce((s, m) => s + m.total, 0),
-  };
   const ytdPlanRatio = actuals.length / (months.length || 1);
   const ytdPlan = {
     overhead: Math.round(PLAN.overhead * ytdPlanRatio),
@@ -276,7 +325,6 @@ export default function Dashboard() {
     projDev: Math.round(PLAN.projDev * ytdPlanRatio),
     total: Math.round(PLAN.total * ytdPlanRatio),
   };
-  const projVariance = PLAN.total - totalProjected.total;
   // ── Overview: next 12 projected months (after last actual) ──
   const overviewData = useMemo(() => {
     return months.filter(m => !m.actual).slice(0, 12);
@@ -338,22 +386,29 @@ export default function Dashboard() {
 
   // ── Projected vs Plan monthly ──
   const projVsPlanData = useMemo(() => {
-    const monthlyPlan = PLAN.total / months.length;
+    const planMap = new Map<string, PlanMonth>();
+    for (const p of planMonths) {
+      const d = parseMonthLabel(p.month);
+      if (d) planMap.set(`${d.getFullYear()}-${d.getMonth()}`, p);
+    }
     let cumProjected = 0;
     let cumPlan = 0;
-    return months.map(m => {
+    return overviewData.map(m => {
+      const d = parseMonthLabel(m.month);
+      const key = d ? `${d.getFullYear()}-${d.getMonth()}` : "";
+      const plan = planMap.get(key)?.total ?? 0;
       cumProjected += m.total;
-      cumPlan += monthlyPlan;
+      cumPlan += plan;
       return {
         month: m.month,
         projected: m.total,
-        plan: Math.round(monthlyPlan),
+        plan,
         cumProjected: Math.round(cumProjected),
         cumPlan: Math.round(cumPlan),
-        variance: Math.round(monthlyPlan - m.total),
+        variance: Math.round(plan - m.total),
       };
     });
-  }, [months]);
+  }, [overviewData, planMonths]);
 
   // ── Loading / Error ──
   if (loading) return (
@@ -745,7 +800,7 @@ export default function Dashboard() {
                 <Tooltip content={<ChartTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar dataKey="projected" name="Projected Spend" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={20} />
-                <Line type="monotone" dataKey="plan" name="Plan (avg/mo)" stroke={C.orange} strokeWidth={2} strokeDasharray="6 3" dot={false} />
+                <Line type="monotone" dataKey="plan" name="Pitch Deck Plan" stroke={C.orange} strokeWidth={2} strokeDasharray="6 3" dot={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -769,24 +824,32 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </div>
 
-          {/* Summary card */}
-          <div style={{ marginTop: 16, display: "flex", gap: 16, flexWrap: "wrap" }}>
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", flex: 1, minWidth: 200 }}>
-              <div style={{ fontSize: 11, textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>Total Plan</div>
-              <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "monospace" }}>{fmt(PLAN.total)}</div>
-            </div>
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", flex: 1, minWidth: 200 }}>
-              <div style={{ fontSize: 11, textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>Total Projected</div>
-              <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "monospace", color: totalProjected.total > PLAN.total ? C.red : C.green }}>{fmt(totalProjected.total)}</div>
-            </div>
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", flex: 1, minWidth: 200 }}>
-              <div style={{ fontSize: 11, textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>Variance</div>
-              <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "monospace", color: projVariance >= 0 ? C.green : C.red }}>
-                {projVariance >= 0 ? "+" : ""}{fmt(projVariance)}
+          {/* Summary card (NTM window) */}
+          {(() => {
+            const last = projVsPlanData[projVsPlanData.length - 1];
+            const planTotal = last?.cumPlan ?? 0;
+            const projTotal = last?.cumProjected ?? 0;
+            const variance = planTotal - projTotal;
+            return (
+              <div style={{ marginTop: 16, display: "flex", gap: 16, flexWrap: "wrap" }}>
+                <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", flex: 1, minWidth: 200 }}>
+                  <div style={{ fontSize: 11, textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>NTM Plan</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "monospace" }}>{fmt(planTotal)}</div>
+                </div>
+                <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", flex: 1, minWidth: 200 }}>
+                  <div style={{ fontSize: 11, textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>NTM Projected</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "monospace", color: projTotal > planTotal ? C.red : C.green }}>{fmt(projTotal)}</div>
+                </div>
+                <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", flex: 1, minWidth: 200 }}>
+                  <div style={{ fontSize: 11, textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>Variance</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "monospace", color: variance >= 0 ? C.green : C.red }}>
+                    {variance >= 0 ? "+" : ""}{fmt(variance)}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{variance >= 0 ? "Under plan" : "Over plan"}</div>
+                </div>
               </div>
-              <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{projVariance >= 0 ? "Under budget" : "Over budget"}</div>
-            </div>
-          </div>
+            );
+          })()}
         </>
       )}
 
