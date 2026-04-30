@@ -19,6 +19,9 @@ const PLAN_CSV_URL =
 const PLAN = {
   overhead: 2633667, corpDev: 416667, projDev: 6687500, total: 9737833,
 };
+const PITCH_DECK_FALLBACK = {
+  overhead: 2509867, corpDev: 316667, projDev: 5350000, total: 2509867 + 316667 + 5350000,
+};
 
 // ══════════════════════════════════════════════
 // TYPES
@@ -185,25 +188,60 @@ function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; pi
       payroll: Math.round(pr),
     });
   }
-  // Find "NTM Projected" and "NTM Pitch Deck" summary columns in the same header row
+  // Find "NTM Projected" and "NTM Pitch Deck" summary columns — scan ALL rows in case the
+  // labels live in a different row than the month labels (merged cells, multi-row headers).
   let pitchCol: number | null = null;
   let projCol: number | null = null;
-  for (let c = 0; c < monthLabelRow.length; c++) {
-    const cell = (monthLabelRow[c] || "").toLowerCase().replace(/\s+/g, " ").trim();
-    if (pitchCol === null && cell.includes("pitch deck")) pitchCol = c;
-    if (projCol === null && cell.includes("ntm projected")) projCol = c;
+  let pitchHeaderRaw = "";
+  let projHeaderRaw = "";
+  for (const row of rows) {
+    for (let c = 0; c < row.length; c++) {
+      const raw = row[c] || "";
+      const cell = raw.toLowerCase().replace(/\s+/g, " ").trim();
+      if (pitchCol === null && (cell.includes("pitch deck") || cell.includes("ntm pitch"))) {
+        pitchCol = c;
+        pitchHeaderRaw = raw;
+      }
+      if (projCol === null && cell.includes("ntm projected")) {
+        projCol = c;
+        projHeaderRaw = raw;
+      }
+    }
   }
-  const readCol = (col: number | null): PitchDeck | null => {
-    if (col === null) return null;
+  console.log("[parseSheet] columns located:", {
+    pitchDeck: { col: pitchCol, header: pitchHeaderRaw },
+    ntmProjected: { col: projCol, header: projHeaderRaw },
+  });
+  console.log("[parseSheet] cost rows located:", {
+    overheadRow: !!overheadRow,
+    corpDevRow: !!corpDevRow,
+    projDevRow: !!projDevRow,
+    totalRow: !!totalRow,
+  });
+
+  const readCol = (col: number | null, label: string): PitchDeck | null => {
+    if (col === null) {
+      console.warn(`[parseSheet] ${label}: column not found in CSV`);
+      return null;
+    }
     const oh = toNum(overheadRow?.[col]);
     const cd = toNum(corpDevRow?.[col]);
     const pd = toNum(projDevRow?.[col]);
     const tot = toNum(totalRow?.[col]);
+    console.log(`[parseSheet] ${label} (col ${col}):`, {
+      overhead: oh, corpDev: cd, projDev: pd, total: tot,
+      rawCells: {
+        overhead: overheadRow?.[col],
+        corpDev: corpDevRow?.[col],
+        projDev: projDevRow?.[col],
+        total: totalRow?.[col],
+      },
+    });
     if (!oh && !cd && !pd && !tot) return null;
     return { overhead: oh, corpDev: cd, projDev: pd, total: tot };
   };
-  const pitchDeck = readCol(pitchCol);
-  const ntmProj = readCol(projCol);
+  const pitchDeck = readCol(pitchCol, "Pitch Deck");
+  const ntmProj = readCol(projCol, "NTM Projected");
 
   return { months: months.filter(m => m.total > 0), reviewLabel, pitchDeck, ntmProj };
 }
@@ -550,9 +588,9 @@ export default function Dashboard() {
             </div>
             <div style={{ flex: "1 1 340px", minWidth: 340, display: "flex", flexDirection: "column", gap: 12 }}>
               {([
-                { label: "Corporate Overhead", val: ntmProj?.overhead ?? ntmTotals.overhead, plan: pitchDeck?.overhead ?? PLAN.overhead, color: C.blue, desc: "Payroll, insurance, travel, admin, office, recruiting" },
-                { label: "Corporate Development", val: ntmProj?.corpDev ?? ntmTotals.corpDev, plan: pitchDeck?.corpDev ?? PLAN.corpDev, color: C.purple, desc: "Legal (fundraise), design & branding, SEO" },
-                { label: "Project Development", val: ntmProj?.projDev ?? ntmTotals.projDev, plan: pitchDeck?.projDev ?? PLAN.projDev, color: C.green, desc: "Engineering, architect, legal, DD, broker, land carry" },
+                { label: "Corporate Overhead", val: ntmProj?.overhead ?? ntmTotals.overhead, plan: pitchDeck?.overhead || PITCH_DECK_FALLBACK.overhead, color: C.blue, desc: "Payroll, insurance, travel, admin, office, recruiting" },
+                { label: "Corporate Development", val: ntmProj?.corpDev ?? ntmTotals.corpDev, plan: pitchDeck?.corpDev || PITCH_DECK_FALLBACK.corpDev, color: C.purple, desc: "Legal (fundraise), design & branding, SEO" },
+                { label: "Project Development", val: ntmProj?.projDev ?? ntmTotals.projDev, plan: pitchDeck?.projDev || PITCH_DECK_FALLBACK.projDev, color: C.green, desc: "Engineering, architect, legal, DD, broker, land carry" },
               ]).map((item, i) => {
                 const v = item.val - item.plan;
                 return (
