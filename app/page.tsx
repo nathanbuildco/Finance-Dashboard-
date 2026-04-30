@@ -588,9 +588,9 @@ export default function Dashboard() {
             </div>
             <div style={{ flex: "1 1 340px", minWidth: 340, display: "flex", flexDirection: "column", gap: 12 }}>
               {([
-                { label: "Corporate Overhead", val: ntmProj?.overhead ?? ntmTotals.overhead, plan: pitchDeck?.overhead || PITCH_DECK_FALLBACK.overhead, color: C.blue, desc: "Payroll, insurance, travel, admin, office, recruiting" },
-                { label: "Corporate Development", val: ntmProj?.corpDev ?? ntmTotals.corpDev, plan: pitchDeck?.corpDev || PITCH_DECK_FALLBACK.corpDev, color: C.purple, desc: "Legal (fundraise), design & branding, SEO" },
-                { label: "Project Development", val: ntmProj?.projDev ?? ntmTotals.projDev, plan: pitchDeck?.projDev || PITCH_DECK_FALLBACK.projDev, color: C.green, desc: "Engineering, architect, legal, DD, broker, land carry" },
+                { label: "Corporate Overhead", val: ntmTotals.overhead, plan: planMonths.filter(p => overviewData.some(o => fmtMonth(o.month) === fmtMonth(p.month))).reduce((s, m) => s + m.overhead, 0) || PITCH_DECK_FALLBACK.overhead, color: C.blue, desc: "Payroll, insurance, travel, admin, office, recruiting" },
+                { label: "Corporate Development", val: ntmTotals.corpDev, plan: planMonths.filter(p => overviewData.some(o => fmtMonth(o.month) === fmtMonth(p.month))).reduce((s, m) => s + m.corpDev, 0) || PITCH_DECK_FALLBACK.corpDev, color: C.purple, desc: "Legal (fundraise), design & branding, SEO" },
+                { label: "Project Development", val: ntmTotals.projDev, plan: planMonths.filter(p => overviewData.some(o => fmtMonth(o.month) === fmtMonth(p.month))).reduce((s, m) => s + m.projDev, 0) || PITCH_DECK_FALLBACK.projDev, color: C.green, desc: "Engineering, architect, legal, DD, broker, land carry" },
               ]).map((item, i) => {
                 const v = item.val - item.plan;
                 return (
