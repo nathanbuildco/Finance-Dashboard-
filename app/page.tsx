@@ -400,6 +400,7 @@ export default function Dashboard() {
   // ── Quarterly payroll data ──
   // Annualized & FTE are taken from the LAST month of each quarter (run-rate convention),
   // not averaged. Quarterly column stays as the sum of the months in the quarter.
+  // Capped at the quarter containing the last NTM month so we don't show quarters past Mar '27.
   const quarterlyPayroll = useMemo(() => {
     const qMap: Record<string, {
       payroll: number;
@@ -424,13 +425,17 @@ export default function Dashboard() {
         qMap[key].lastHc = m.headcount;
       }
     }
-    return Object.entries(qMap).map(([quarter, data]) => ({
-      quarter,
-      annualized: Math.round(data.lastPayroll * 12),
-      quarterly: Math.round(data.payroll),
-      fte: data.lastHc,
-    })).filter(q => q.quarter !== "Q2 '25");
-  }, [months]);
+    const lastNtm = overviewData.length > 0 ? parseMonthLabel(overviewData[overviewData.length - 1].month) : null;
+    return Object.entries(qMap)
+      .filter(([, data]) => !lastNtm || (data.lastDate !== null && data.lastDate <= lastNtm))
+      .map(([quarter, data]) => ({
+        quarter,
+        annualized: Math.round(data.lastPayroll * 12),
+        quarterly: Math.round(data.payroll),
+        fte: data.lastHc,
+      }))
+      .filter(q => q.quarter !== "Q2 '25");
+  }, [months, overviewData]);
 
   // ── Next fully-projected quarter's annualized payroll ──
   const nextQuarterPayroll = useMemo(() => {
@@ -768,14 +773,15 @@ export default function Dashboard() {
           <Section>Quarterly Annualized Payroll + FTE</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
             <ResponsiveContainer width="100%" height={320}>
-              <ComposedChart data={quarterlyPayroll} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
-                <XAxis dataKey="quarter" tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: "#1e2430" }} />
+              <ComposedChart data={quarterlyPayroll} margin={{ top: 32, right: 20, left: 10, bottom: 0 }}>
+                <XAxis dataKey="quarter" tick={{ fill: C.text, fontSize: 11 }} axisLine={{ stroke: "#1e2430" }} />
                 <YAxis yAxisId="cost" tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
-                <YAxis yAxisId="fte" orientation="right" tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} axisLine={false} domain={[0, 'auto']} />
+                <YAxis yAxisId="fte" orientation="right" tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} axisLine={false} domain={[0, 14]} ticks={[0, 2, 4, 6, 8, 10, 12, 14]} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar yAxisId="cost" dataKey="annualized" name="Annualized Payroll" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={36} />
+                <Bar yAxisId="cost" dataKey="annualized" name="Annualized Payroll" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={36}>
+                  <LabelList dataKey="annualized" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.text, fontSize: 11, fontFamily: "monospace", fontWeight: 600 }} />
+                </Bar>
                 <Line yAxisId="fte" type="monotone" dataKey="fte" name="FTE" stroke={C.orange} strokeWidth={3} dot={{ fill: C.orange, r: 5 }} />
               </ComposedChart>
             </ResponsiveContainer>
