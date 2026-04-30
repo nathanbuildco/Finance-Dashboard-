@@ -416,7 +416,7 @@ export default function Dashboard() {
       annualized: Math.round((data.payroll / data.months) * 12),
       quarterly: Math.round(data.payroll),
       fte: data.hc,
-    }));
+    })).filter(q => q.quarter !== "Q2 '25");
   }, [months]);
 
   // ── Next fully-projected quarter's annualized payroll ──
