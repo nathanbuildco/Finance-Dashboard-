@@ -430,15 +430,20 @@ const C = {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const ChartTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
+  // Hide the split helper series used to render solid/dashed cumulative line segments —
+  // the underlying "Cumulative" Area carries the value and stays in the tooltip.
+  const HIDDEN_KEYS = new Set(["cumActual", "cumProj"]);
   // Surface plan/baseline rows first (any dataKey containing "plan") so they read above
   // the projected/actual rows in tooltips.
   const isPlan = (k: string) => typeof k === "string" && k.toLowerCase().includes("plan");
-  const sorted = [...payload].sort((a, b) => Number(isPlan(b.dataKey)) - Number(isPlan(a.dataKey)));
+  const sorted = [...payload]
+    .filter((p: any) => !HIDDEN_KEYS.has(p.dataKey))
+    .sort((a, b) => Number(isPlan(b.dataKey)) - Number(isPlan(a.dataKey)));
   return (
-    <div style={{ background: "#1a1f2e", border: "1px solid #2a3040", borderRadius: 8, padding: "12px 16px", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
-      <p style={{ color: C.text, fontWeight: 600, marginBottom: 6, fontSize: 13 }}>{label}</p>
+    <div style={{ background: "#1a1f2e", border: "1px solid #2a3040", borderRadius: 10, padding: "18px 22px", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
+      <p style={{ color: C.text, fontWeight: 700, marginBottom: 12, fontSize: 20 }}>{label}</p>
       {sorted.map((p: any, i: number) => (
-        <p key={i} style={{ color: p.color, fontSize: 12, margin: "3px 0", fontFamily: "monospace" }}>{p.name}: {p.dataKey === "headcount" || p.dataKey === "fte" ? p.value : fmtFull(p.value)}</p>
+        <p key={i} style={{ color: p.color, fontSize: 17, margin: "6px 0", fontFamily: "monospace" }}>{p.name}: {p.dataKey === "headcount" || p.dataKey === "fte" ? p.value : fmtFull(p.value)}</p>
       ))}
     </div>
   );
@@ -538,20 +543,15 @@ export default function Dashboard() {
   [overviewData]);
 
   const cumData = useMemo(() => {
-    const visible = [
-      ...months.filter(m => m.actual),
-      ...months.filter(m => !m.actual).slice(0, 12),
-    ];
-    // Accumulate including June '25 so its spend rolls into July's cumulative...
-    let cum = 0;
-    const withCum = visible.map(d => { cum += d.total; return { ...d, cumulative: Math.round(cum) }; });
-    // ...then hide the June '25 row from the chart display.
-    return withCum.filter(d => {
-      const date = parseMonthLabel(d.month);
-      if (!date) return true;
-      return !(date.getFullYear() === 2025 && date.getMonth() === 5);
+    // X axis is the NTM window (matches the bar chart above), but cumulative starts
+    // from inception-to-date so April '26 = inception spend + April's spend.
+    const inceptionTotal = months.filter(m => m.actual).reduce((s, m) => s + m.total, 0);
+    let cum = inceptionTotal;
+    return overviewData.map(d => {
+      cum += d.total;
+      return { ...d, cumulative: Math.round(cum) };
     });
-  }, [months]);
+  }, [overviewData, months]);
 
   // ── Next 2 months data ──
   const next2 = projected.slice(0, 2);
@@ -745,7 +745,7 @@ export default function Dashboard() {
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
             <ResponsiveContainer width="100%" height={380}>
               <ComposedChart data={overviewData} margin={{ top: 48, right: 20, left: 10, bottom: 0 }}>
-                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 11, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 14, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
                 <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -758,15 +758,15 @@ export default function Dashboard() {
               </ComposedChart>
             </ResponsiveContainer>
           </div>
-          <Section>Cumulative Spend</Section>
+          <Section>Cumulative Spend (Inception → NTM End)</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
             <ResponsiveContainer width="100%" height={320}>
               <AreaChart data={cumData} margin={{ top: 44, right: 20, left: 10, bottom: 0 }}>
                 <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.blue} stopOpacity={0.3} /><stop offset="95%" stopColor={C.blue} stopOpacity={0} /></linearGradient></defs>
-                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 11, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 14, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
                 <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
-                <Area type="monotone" dataKey="cumulative" name="Cumulative" stroke={C.blue} fill="url(#cg)" strokeWidth={2}>
+                <Area type="monotone" dataKey="cumulative" name="Cumulative" stroke={C.blue} strokeWidth={2} strokeDasharray="6 3" fill="url(#cg)">
                   <LabelList dataKey="cumulative" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.text, fontSize: 20, fontFamily: "monospace", fontWeight: 600 }} />
                 </Area>
               </AreaChart>
@@ -792,7 +792,12 @@ export default function Dashboard() {
                     labelLine={{ stroke: C.muted }}>
                     <Cell fill={C.blue} /><Cell fill={C.purple} /><Cell fill={C.green} />
                   </Pie>
-                  <Tooltip formatter={(v) => fmtFull(Number(v))} />
+                  <Tooltip
+                    formatter={(v) => fmtFull(Number(v))}
+                    contentStyle={{ background: "#1a1f2e", border: "1px solid #2a3040", borderRadius: 8, padding: "10px 14px" }}
+                    labelStyle={{ color: C.text, fontSize: 16, fontWeight: 700, marginBottom: 4 }}
+                    itemStyle={{ fontSize: 14, fontFamily: "monospace", padding: "2px 0" }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -909,12 +914,12 @@ export default function Dashboard() {
                                     background: "#1a1f2e",
                                     border: "1px solid #2a3040",
                                     borderRadius: 6,
-                                    padding: "6px 10px",
+                                    padding: "8px 12px",
                                     fontFamily: "monospace",
                                     boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
                                   }}>
-                                    <div style={{ color: C.muted, fontSize: 10, marginBottom: 2 }}>{fmtMonth(String(label))}</div>
-                                    <div style={{ color, fontSize: 12, fontWeight: 600 }}>{fmtFull(v)}</div>
+                                    <div style={{ color: C.muted, fontSize: 12, marginBottom: 3 }}>{fmtMonth(String(label))}</div>
+                                    <div style={{ color, fontSize: 14, fontWeight: 600 }}>{fmtFull(v)}</div>
                                   </div>
                                 );
                               }}
@@ -951,7 +956,7 @@ export default function Dashboard() {
                 { name: "Proj Dev", itdActual: itd.projDev, itdPlan: itdPlan.projDev },
               ]} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
-                <XAxis dataKey="name" tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: "#1e2430" }} />
+                <XAxis dataKey="name" tick={{ fill: C.muted, fontSize: 14 }} axisLine={{ stroke: "#1e2430" }} />
                 <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -1000,7 +1005,7 @@ export default function Dashboard() {
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
             <ResponsiveContainer width="100%" height={340}>
               <ComposedChart data={headcountData} margin={{ top: 32, right: 20, left: 10, bottom: 0 }}>
-                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 11, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 14, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
                 <YAxis yAxisId="cost" tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} domain={[0, 30000]} />
                 <YAxis yAxisId="hc" orientation="right" tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} axisLine={false} allowDecimals={false} domain={[0, 15]} />
                 <Tooltip content={<ChartTooltip />} />
@@ -1060,7 +1065,7 @@ export default function Dashboard() {
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={next2} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
-                  <XAxis dataKey="month" tick={{ fill: C.muted, fontSize: 12 }} axisLine={{ stroke: "#1e2430" }} />
+                  <XAxis dataKey="month" tick={{ fill: C.muted, fontSize: 14 }} axisLine={{ stroke: "#1e2430" }} />
                   <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                   <Tooltip content={<ChartTooltip />} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -1081,7 +1086,7 @@ export default function Dashboard() {
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
             <ResponsiveContainer width="100%" height={320}>
               <ComposedChart data={quarterlyPayroll} margin={{ top: 32, right: 20, left: 10, bottom: 0 }}>
-                <XAxis dataKey="quarter" tick={{ fill: C.text, fontSize: 11 }} axisLine={{ stroke: "#1e2430" }} />
+                <XAxis dataKey="quarter" tick={{ fill: C.text, fontSize: 14 }} axisLine={{ stroke: "#1e2430" }} />
                 <YAxis yAxisId="cost" tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <YAxis yAxisId="fte" orientation="right" tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} axisLine={false} domain={[0, 14]} ticks={[0, 2, 4, 6, 8, 10, 12, 14]} />
                 <Tooltip content={<ChartTooltip />} />
@@ -1128,7 +1133,7 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height={340}>
               <ComposedChart data={projVsPlanData} margin={{ top: 50, right: 20, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
-                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 11, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 14, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
                 <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -1151,7 +1156,7 @@ export default function Dashboard() {
                   <linearGradient id="planG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.orange} stopOpacity={0.2} /><stop offset="95%" stopColor={C.orange} stopOpacity={0} /></linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
-                <XAxis dataKey="month" tick={{ fill: C.muted, fontSize: 9, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 14, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
                 <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -1207,7 +1212,7 @@ export default function Dashboard() {
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
               <ResponsiveContainer width="100%" height={420}>
                 <BarChart data={fixedExpensesData} margin={{ top: 36, right: 20, left: 10, bottom: 0 }}>
-                  <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 11, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} />
+                  <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 14, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} />
                   <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                   <Tooltip content={<ChartTooltip />} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
