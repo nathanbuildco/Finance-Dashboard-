@@ -861,14 +861,18 @@ export default function Dashboard() {
           <Section>Monthly Projected Spend vs Initial Plan</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
             <ResponsiveContainer width="100%" height={340}>
-              <ComposedChart data={projVsPlanData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
+              <ComposedChart data={projVsPlanData} margin={{ top: 36, right: 20, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
-                <XAxis dataKey="month" tick={{ fill: C.muted, fontSize: 9, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 11, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
                 <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="projected" name="Projected Spend" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={20} />
-                <Line type="monotone" dataKey="plan" name="Pitch Deck Plan" stroke={C.orange} strokeWidth={2} strokeDasharray="6 3" dot={false} />
+                <Bar dataKey="projected" name="Projected Spend" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={20}>
+                  <LabelList dataKey="projected" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.blue, fontSize: 10, fontFamily: "monospace", fontWeight: 600 }} />
+                </Bar>
+                <Line type="monotone" dataKey="plan" name="Pitch Deck Plan" stroke={C.orange} strokeWidth={2} strokeDasharray="6 3" dot={false}>
+                  <LabelList dataKey="plan" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.orange, fontSize: 10, fontFamily: "monospace", fontWeight: 600 }} />
+                </Line>
               </ComposedChart>
             </ResponsiveContainer>
           </div>
