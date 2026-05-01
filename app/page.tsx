@@ -745,10 +745,10 @@ export default function Dashboard() {
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(50vh, 720px)", minHeight: 380 }}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={overviewData} margin={{ top: 48, right: 20, left: 10, bottom: 0 }}>
-                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={90} />
                 <YAxis tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 20 }} />
+                <Legend verticalAlign="top" wrapperStyle={{ fontSize: 20, paddingBottom: 12 }} />
                 <Bar dataKey="overhead" name="Corp Overhead" stackId="a" fill={C.blue} />
                 <Bar dataKey="corpDev" name="Corp Dev" stackId="a" fill={C.purple} />
                 <Bar dataKey="projDev" name="Project Dev" stackId="a" fill={C.green} radius={[3, 3, 0, 0] as [number, number, number, number]}>
@@ -763,7 +763,7 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={cumData} margin={{ top: 44, right: 20, left: 10, bottom: 0 }}>
                 <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.blue} stopOpacity={0.3} /><stop offset="95%" stopColor={C.blue} stopOpacity={0} /></linearGradient></defs>
-                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={90} />
                 <YAxis tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
                 <Area type="monotone" dataKey="cumulative" name="Cumulative" stroke={C.blue} strokeWidth={2} strokeDasharray="6 3" fill="url(#cg)">
@@ -1024,14 +1024,14 @@ export default function Dashboard() {
           <Section>NTM Monthly Payroll Cost/Headcount</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(55vh, 720px)", minHeight: 380 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={headcountData} margin={{ top: 32, right: 20, left: 10, bottom: 0 }}>
-                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+              <ComposedChart data={headcountData} margin={{ top: 56, right: 20, left: 10, bottom: 0 }}>
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={90} />
                 <YAxis yAxisId="cost" tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} domain={[0, 30000]} />
                 <YAxis yAxisId="hc" orientation="right" tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} axisLine={false} allowDecimals={false} domain={[0, 15]} />
                 <Tooltip content={<ChartTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 20 }} />
-                <Bar yAxisId="cost" dataKey="avgCost" name="Avg Cost / Employee" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={24} opacity={0.7}>
-                  <LabelList dataKey="avgCost" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.text, fontSize: 11, fontFamily: "monospace", fontWeight: 600 }} />
+                <Legend verticalAlign="top" wrapperStyle={{ fontSize: 20, paddingBottom: 12 }} />
+                <Bar yAxisId="cost" dataKey="avgCost" name="Avg Cost / Employee" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={60} opacity={0.7}>
+                  <LabelList dataKey="avgCost" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.text, fontSize: 18, fontFamily: "monospace", fontWeight: 600 }} />
                 </Bar>
                 <Line yAxisId="hc" type="monotone" dataKey="headcount" name="Headcount" stroke={C.orange} strokeWidth={2} dot={{ fill: C.orange, r: 3 }} />
               </ComposedChart>
@@ -1153,7 +1153,7 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={projVsPlanData} margin={{ top: 50, right: 20, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
-                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={90} />
                 <YAxis tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 20 }} />
@@ -1176,7 +1176,7 @@ export default function Dashboard() {
                   <linearGradient id="planG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.orange} stopOpacity={0.2} /><stop offset="95%" stopColor={C.orange} stopOpacity={0} /></linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
-                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={90} />
                 <YAxis tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 20 }} />
