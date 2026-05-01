@@ -1105,14 +1105,14 @@ export default function Dashboard() {
           <Section>Quarterly Annualized Payroll + FTE</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(55vh, 720px)", minHeight: 380 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={quarterlyPayroll} margin={{ top: 56, right: 20, left: 10, bottom: 0 }}>
+              <ComposedChart data={quarterlyPayroll} margin={{ top: 72, right: 20, left: 10, bottom: 0 }}>
                 <XAxis dataKey="quarter" tick={{ fill: C.text, fontSize: 20 }} axisLine={{ stroke: "#1e2430" }} />
                 <YAxis yAxisId="cost" tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <YAxis yAxisId="fte" orientation="right" tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} axisLine={false} domain={[0, 14]} ticks={[0, 2, 4, 6, 8, 10, 12, 14]} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend verticalAlign="top" wrapperStyle={{ fontSize: 20, paddingBottom: 12 }} />
                 <Bar yAxisId="cost" dataKey="annualized" name="Annualized Payroll" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={70}>
-                  <LabelList dataKey="annualized" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.text, fontSize: 18, fontFamily: "monospace", fontWeight: 600 }} />
+                  <LabelList dataKey="annualized" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.text, fontSize: 24, fontFamily: "monospace", fontWeight: 700 }} />
                 </Bar>
                 <Line yAxisId="fte" type="monotone" dataKey="fte" name="FTE" stroke={C.orange} strokeWidth={3} dot={{ fill: C.orange, r: 5 }} />
               </ComposedChart>
@@ -1151,17 +1151,17 @@ export default function Dashboard() {
           <Section>NTM Monthly Spend: Projected vs. Plan</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(50vh, 720px)", minHeight: 380 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={projVsPlanData} margin={{ top: 70, right: 20, left: 10, bottom: 0 }}>
+              <ComposedChart data={projVsPlanData} margin={{ top: 90, right: 20, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
                 <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={90} />
                 <YAxis tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend verticalAlign="top" wrapperStyle={{ fontSize: 20, paddingBottom: 12 }} />
                 <Bar dataKey="projected" name="Projected Spend" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={50}>
-                  <LabelList dataKey="projected" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.blue, fontSize: 16, fontFamily: "monospace", fontWeight: 600 }} />
+                  <LabelList dataKey="projected" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.blue, fontSize: 22, fontFamily: "monospace", fontWeight: 700 }} />
                 </Bar>
                 <Line type="monotone" dataKey="plan" name="Plan" stroke={C.orange} strokeWidth={2} strokeDasharray="6 3" dot={false}>
-                  <LabelList dataKey="plan" position="top" offset={22} formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.orange, fontSize: 16, fontFamily: "monospace", fontWeight: 600 }} />
+                  <LabelList dataKey="plan" position="top" offset={28} formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.orange, fontSize: 22, fontFamily: "monospace", fontWeight: 700 }} />
                 </Line>
               </ComposedChart>
             </ResponsiveContainer>
