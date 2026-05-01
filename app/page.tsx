@@ -1105,14 +1105,14 @@ export default function Dashboard() {
           <Section>Quarterly Annualized Payroll + FTE</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(55vh, 720px)", minHeight: 380 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={quarterlyPayroll} margin={{ top: 32, right: 20, left: 10, bottom: 0 }}>
+              <ComposedChart data={quarterlyPayroll} margin={{ top: 56, right: 20, left: 10, bottom: 0 }}>
                 <XAxis dataKey="quarter" tick={{ fill: C.text, fontSize: 20 }} axisLine={{ stroke: "#1e2430" }} />
                 <YAxis yAxisId="cost" tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <YAxis yAxisId="fte" orientation="right" tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} axisLine={false} domain={[0, 14]} ticks={[0, 2, 4, 6, 8, 10, 12, 14]} />
                 <Tooltip content={<ChartTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 20 }} />
-                <Bar yAxisId="cost" dataKey="annualized" name="Annualized Payroll" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={36}>
-                  <LabelList dataKey="annualized" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.text, fontSize: 11, fontFamily: "monospace", fontWeight: 600 }} />
+                <Legend verticalAlign="top" wrapperStyle={{ fontSize: 20, paddingBottom: 12 }} />
+                <Bar yAxisId="cost" dataKey="annualized" name="Annualized Payroll" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={70}>
+                  <LabelList dataKey="annualized" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.text, fontSize: 18, fontFamily: "monospace", fontWeight: 600 }} />
                 </Bar>
                 <Line yAxisId="fte" type="monotone" dataKey="fte" name="FTE" stroke={C.orange} strokeWidth={3} dot={{ fill: C.orange, r: 5 }} />
               </ComposedChart>
@@ -1151,17 +1151,17 @@ export default function Dashboard() {
           <Section>NTM Monthly Spend: Projected vs. Plan</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(50vh, 720px)", minHeight: 380 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={projVsPlanData} margin={{ top: 50, right: 20, left: 10, bottom: 0 }}>
+              <ComposedChart data={projVsPlanData} margin={{ top: 70, right: 20, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
                 <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={90} />
                 <YAxis tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 20 }} />
-                <Bar dataKey="projected" name="Projected Spend" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={20}>
-                  <LabelList dataKey="projected" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.blue, fontSize: 10, fontFamily: "monospace", fontWeight: 600 }} />
+                <Legend verticalAlign="top" wrapperStyle={{ fontSize: 20, paddingBottom: 12 }} />
+                <Bar dataKey="projected" name="Projected Spend" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={50}>
+                  <LabelList dataKey="projected" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.blue, fontSize: 16, fontFamily: "monospace", fontWeight: 600 }} />
                 </Bar>
                 <Line type="monotone" dataKey="plan" name="Plan" stroke={C.orange} strokeWidth={2} strokeDasharray="6 3" dot={false}>
-                  <LabelList dataKey="plan" position="top" offset={18} formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.orange, fontSize: 10, fontFamily: "monospace", fontWeight: 600 }} />
+                  <LabelList dataKey="plan" position="top" offset={22} formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.orange, fontSize: 16, fontFamily: "monospace", fontWeight: 600 }} />
                 </Line>
               </ComposedChart>
             </ResponsiveContainer>
@@ -1170,7 +1170,7 @@ export default function Dashboard() {
           <Section>NTM Cumulative Spend: Projected vs. Plan</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(40vh, 600px)", minHeight: 320 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={projVsPlanData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
+              <AreaChart data={projVsPlanData} margin={{ top: 16, right: 20, left: 10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="projG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.blue} stopOpacity={0.3} /><stop offset="95%" stopColor={C.blue} stopOpacity={0} /></linearGradient>
                   <linearGradient id="planG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.orange} stopOpacity={0.2} /><stop offset="95%" stopColor={C.orange} stopOpacity={0} /></linearGradient>
@@ -1179,7 +1179,7 @@ export default function Dashboard() {
                 <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={90} />
                 <YAxis tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 20 }} />
+                <Legend verticalAlign="top" wrapperStyle={{ fontSize: 20, paddingBottom: 12 }} />
                 <Area type="monotone" dataKey="cumProjected" name="Cum. Projected" stroke={C.blue} fill="url(#projG)" strokeWidth={2} />
                 <Area type="monotone" dataKey="cumPlan" name="Cum. Plan" stroke={C.orange} fill="url(#planG)" strokeWidth={2} strokeDasharray="6 3" />
               </AreaChart>
@@ -1231,16 +1231,16 @@ export default function Dashboard() {
             </div>
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(55vh, 720px)", minHeight: 380 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={fixedExpensesData} margin={{ top: 36, right: 20, left: 10, bottom: 0 }}>
+                <BarChart data={fixedExpensesData} margin={{ top: 56, right: 20, left: 10, bottom: 0 }} barCategoryGap="20%" barGap={4}>
                   <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} />
                   <YAxis tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                   <Tooltip content={<ChartTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 20 }} />
+                  <Legend verticalAlign="top" wrapperStyle={{ fontSize: 20, paddingBottom: 12 }} />
                   <Bar dataKey="projected" name="Projected Fixed Expenses" fill={C.blue} radius={[3, 3, 0, 0] as [number, number, number, number]}>
-                    <LabelList dataKey="projected" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.blue, fontSize: 10, fontFamily: "monospace", fontWeight: 600 }} />
+                    <LabelList dataKey="projected" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.blue, fontSize: 16, fontFamily: "monospace", fontWeight: 600 }} />
                   </Bar>
                   <Bar dataKey="plan" name="Initial Plan Fixed Expenses" fill="rgba(255,255,255,0.25)" radius={[3, 3, 0, 0] as [number, number, number, number]}>
-                    <LabelList dataKey="plan" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.muted, fontSize: 10, fontFamily: "monospace", fontWeight: 600 }} />
+                    <LabelList dataKey="plan" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.muted, fontSize: 16, fontFamily: "monospace", fontWeight: 600 }} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
