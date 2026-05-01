@@ -453,15 +453,15 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 function KPI({ label, value, sub, color, good }: { label: string; value: string; sub?: string; color?: string; good?: boolean }) {
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: `1px solid ${C.blue}`, borderRadius: 12, padding: "22px 24px", flex: 1, minWidth: 190, textAlign: "center", boxShadow: `inset 0 1px 0 ${C.blue}33` }}>
-      <div style={{ fontSize: 32, fontWeight: 700, color: color || C.text, fontFamily: "monospace", lineHeight: 1.05 }}>{value}</div>
-      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: C.text, marginTop: 10, fontWeight: 600 }}>{label}</div>
-      {sub && <div style={{ fontSize: 11, color: good === true ? C.green : good === false ? C.red : C.muted, marginTop: 4 }}>{sub}</div>}
+      <div style={{ fontSize: 52, fontWeight: 700, color: color || C.text, fontFamily: "monospace", lineHeight: 1.05 }}>{value}</div>
+      <div style={{ fontSize: 18, textTransform: "uppercase", letterSpacing: "0.1em", color: C.text, marginTop: 16, fontWeight: 600 }}>{label}</div>
+      {sub && <div style={{ fontSize: 16, color: good === true ? C.green : good === false ? C.red : C.muted, marginTop: 8 }}>{sub}</div>}
     </div>
   );
 }
 
 function Section({ children }: { children: React.ReactNode }) {
-  return <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: "36px 0 16px", borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>{children}</h2>;
+  return <h2 style={{ fontSize: 32, fontWeight: 700, color: C.text, margin: "44px 0 20px", borderBottom: `1px solid ${C.border}`, paddingBottom: 14 }}>{children}</h2>;
 }
 
 // ══════════════════════════════════════════════
@@ -711,17 +711,17 @@ export default function Dashboard() {
         <div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/tbc-logo.svg" alt="The Building Company" style={{ height: 40, width: "auto", display: "block", marginBottom: 14 }} />
-          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: C.blue, marginBottom: 4, fontWeight: 600 }}>Financial Projections</div>
-          <h1 style={{ fontSize: 26, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>Finance Dashboard</h1>
-          <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
+          <div style={{ fontSize: 14, textTransform: "uppercase", letterSpacing: "0.12em", color: C.blue, marginBottom: 6, fontWeight: 600 }}>Financial Projections</div>
+          <h1 style={{ fontSize: 44, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>Finance Dashboard</h1>
+          <div style={{ fontSize: 20, color: C.muted, marginTop: 10 }}>
             Actuals through {reviewLabel}
-            <button onClick={load} style={{ marginLeft: 12, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 6, padding: "2px 10px", cursor: "pointer", fontSize: 11 }}>↻ Refresh</button>
+            <button onClick={load} style={{ marginLeft: 16, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 16 }}>↻ Refresh</button>
           </div>
         </div>
         <div style={{ display: "flex", gap: 2, background: C.card, borderRadius: 8, border: `1px solid ${C.border}`, padding: 3, flexWrap: "wrap" }}>
           {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{
-              padding: "7px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 500,
+              padding: "12px 20px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 18, fontWeight: 600,
               background: tab === t.id ? C.blue : "transparent", color: tab === t.id ? C.bg : C.muted,
             }}>{t.label}</button>
           ))}
@@ -742,13 +742,13 @@ export default function Dashboard() {
       {tab === "overview" && (
         <>
           <Section>NTM Spend Projections</Section>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
-            <ResponsiveContainer width="100%" height={380}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(50vh, 720px)", minHeight: 380 }}>
+            <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={overviewData} margin={{ top: 48, right: 20, left: 10, bottom: 0 }}>
-                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 14, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
-                <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+                <YAxis tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Legend wrapperStyle={{ fontSize: 20 }} />
                 <Bar dataKey="overhead" name="Corp Overhead" stackId="a" fill={C.blue} />
                 <Bar dataKey="corpDev" name="Corp Dev" stackId="a" fill={C.purple} />
                 <Bar dataKey="projDev" name="Project Dev" stackId="a" fill={C.green} radius={[3, 3, 0, 0] as [number, number, number, number]}>
@@ -759,12 +759,12 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </div>
           <Section>Cumulative Spend (Inception → NTM End)</Section>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
-            <ResponsiveContainer width="100%" height={320}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(40vh, 600px)", minHeight: 320 }}>
+            <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={cumData} margin={{ top: 44, right: 20, left: 10, bottom: 0 }}>
                 <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.blue} stopOpacity={0.3} /><stop offset="95%" stopColor={C.blue} stopOpacity={0} /></linearGradient></defs>
-                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 14, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
-                <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+                <YAxis tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
                 <Area type="monotone" dataKey="cumulative" name="Cumulative" stroke={C.blue} strokeWidth={2} strokeDasharray="6 3" fill="url(#cg)">
                   <LabelList dataKey="cumulative" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.text, fontSize: 20, fontFamily: "monospace", fontWeight: 600 }} />
@@ -780,15 +780,35 @@ export default function Dashboard() {
         <>
           <Section>Cost Mix — NTM</Section>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, flex: "1 1 280px", minWidth: 280 }}>
-              <ResponsiveContainer width="100%" height={320}>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, flex: "1 1 280px", minWidth: 280, height: "min(50vh, 600px)", minHeight: 380 }}>
+              <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={[
                     { name: "Corp Overhead", value: ntmTotals.overhead, color: C.blue },
                     { name: "Corp Dev", value: ntmTotals.corpDev, color: C.purple },
                     { name: "Proj Dev", value: ntmTotals.projDev, color: C.green },
-                  ]} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={3} dataKey="value"
-                    label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                  ]} cx="50%" cy="50%" innerRadius="48%" outerRadius="78%" paddingAngle={3} dataKey="value"
+                    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+                    label={(props: any) => {
+                      const { cx, cy, midAngle, outerRadius, name, percent, fill } = props;
+                      const RADIAN = Math.PI / 180;
+                      const r = outerRadius + 28;
+                      const x = cx + r * Math.cos(-midAngle * RADIAN);
+                      const y = cy + r * Math.sin(-midAngle * RADIAN);
+                      return (
+                        <text
+                          x={x}
+                          y={y}
+                          fill={fill}
+                          fontSize={28}
+                          fontWeight={700}
+                          textAnchor={x > cx ? "start" : "end"}
+                          dominantBaseline="central"
+                        >
+                          {`${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                        </text>
+                      );
+                    }}
                     labelLine={{ stroke: C.muted }}>
                     <Cell fill={C.blue} /><Cell fill={C.purple} /><Cell fill={C.green} />
                   </Pie>
@@ -801,7 +821,7 @@ export default function Dashboard() {
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ flex: "1 1 340px", minWidth: 340, display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ flex: "1 1 340px", minWidth: 340, display: "flex", flexDirection: "column", gap: 16, height: "min(50vh, 600px)", minHeight: 380 }}>
               {([
                 { label: "Corporate Overhead", val: ntmTotals.overhead, plan: planMonths.filter(p => overviewData.some(o => fmtMonth(o.month) === fmtMonth(p.month))).reduce((s, m) => s + m.overhead, 0) || PITCH_DECK_FALLBACK.overhead, color: C.blue, desc: "Payroll, insurance, travel, admin, office, recruiting" },
                 { label: "Corporate Development", val: ntmTotals.corpDev, plan: planMonths.filter(p => overviewData.some(o => fmtMonth(o.month) === fmtMonth(p.month))).reduce((s, m) => s + m.corpDev, 0) || PITCH_DECK_FALLBACK.corpDev, color: C.purple, desc: "Legal (fundraise), design & branding, SEO" },
@@ -809,18 +829,18 @@ export default function Dashboard() {
               ]).map((item, i) => {
                 const v = item.val - item.plan;
                 return (
-                  <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 20px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <div style={{ width: 10, height: 10, borderRadius: 3, background: item.color }} />
-                          <span style={{ fontWeight: 600, fontSize: 14 }}>{item.label}</span>
+                  <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "28px 36px", flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                          <div style={{ width: 22, height: 22, borderRadius: 6, background: item.color }} />
+                          <span style={{ fontWeight: 700, fontSize: 32 }}>{item.label}</span>
                         </div>
-                        <div style={{ fontSize: 11, color: C.muted, marginTop: 2, marginLeft: 18 }}>{item.desc}</div>
+                        <div style={{ fontSize: 19, color: C.muted, marginTop: 10, marginLeft: 36 }}>{item.desc}</div>
                       </div>
                       <div style={{ textAlign: "right" }}>
-                        <div style={{ fontFamily: "monospace", fontWeight: 600, fontSize: 16 }}>{fmt(item.val)}</div>
-                        <div style={{ fontSize: 11, color: v <= 0 ? C.green : C.red, fontFamily: "monospace" }}>
+                        <div style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 44, color: C.text }}>{fmt(item.val)}</div>
+                        <div style={{ fontSize: 22, color: v <= 0 ? C.green : C.red, fontFamily: "monospace", fontWeight: 600, marginTop: 8 }}>
                           {v <= 0 ? "▼" : "▲"} {fmt(Math.abs(v))} vs plan
                         </div>
                       </div>
@@ -861,36 +881,36 @@ export default function Dashboard() {
                       <div style={{
                         position: "absolute",
                         top: -1,
-                        right: 16,
+                        right: 20,
                         background: color,
                         color: C.bg,
-                        fontSize: 10,
+                        fontSize: 18,
                         fontWeight: 700,
-                        padding: "3px 8px",
-                        borderRadius: "0 0 6px 6px",
+                        padding: "8px 16px",
+                        borderRadius: "0 0 8px 8px",
                       }}>
                         #{i + 1}
                       </div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8, paddingRight: 32 }}>{e.label}</div>
+                      <div style={{ fontSize: 32, fontWeight: 700, color: C.text, marginBottom: 14, paddingRight: 56 }}>{e.label}</div>
                       {e.bucket && (
                         <div style={{
                           alignSelf: "flex-start",
-                          fontSize: 10,
+                          fontSize: 16,
                           textTransform: "uppercase",
                           letterSpacing: "0.05em",
                           background: "rgba(255,255,255,0.05)",
                           border: `1px solid ${C.border}`,
-                          borderRadius: 4,
-                          padding: "2px 8px",
+                          borderRadius: 6,
+                          padding: "6px 14px",
                           color: C.muted,
-                          marginBottom: 10,
+                          marginBottom: 18,
                           fontWeight: 600,
                         }}>
                           {e.bucket}
                         </div>
                       )}
-                      <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "monospace", color, lineHeight: 1.1 }}>{fmt(e.ntmTotal)}</div>
-                      <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>{pct.toFixed(1)}% of NTM spend</div>
+                      <div style={{ fontSize: 48, fontWeight: 700, fontFamily: "monospace", color, lineHeight: 1.1 }}>{fmt(e.ntmTotal)}</div>
+                      <div style={{ fontSize: 20, color: C.muted, marginTop: 10 }}>{pct.toFixed(1)}% of NTM spend</div>
                       <div style={{ marginTop: 14, marginLeft: -10, marginRight: -10, height: 64, overflow: "visible" }}>
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={sparkData} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
@@ -948,30 +968,30 @@ export default function Dashboard() {
       {tab === "variance" && (
         <>
           <Section>ITD Actuals vs Plan</Section>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
-            <ResponsiveContainer width="100%" height={300}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(50vh, 720px)", minHeight: 380 }}>
+            <ResponsiveContainer width="100%" height="100%">
               <BarChart data={[
                 { name: "Corp Overhead", itdActual: itd.overhead, itdPlan: itdPlan.overhead },
                 { name: "Corp Dev", itdActual: itd.corpDev, itdPlan: itdPlan.corpDev },
                 { name: "Proj Dev", itdActual: itd.projDev, itdPlan: itdPlan.projDev },
-              ]} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
+              ]} margin={{ top: 10, right: 30, left: 10, bottom: 0 }} barCategoryGap="20%" barGap={6}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
-                <XAxis dataKey="name" tick={{ fill: C.muted, fontSize: 14 }} axisLine={{ stroke: "#1e2430" }} />
-                <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
+                <XAxis dataKey="name" tick={{ fill: C.muted, fontSize: 20 }} axisLine={{ stroke: "#1e2430" }} />
+                <YAxis tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="itdActual" name="ITD Actual" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={40} />
-                <Bar dataKey="itdPlan" name="ITD Plan" fill="rgba(255,255,255,0.15)" radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={40} stroke="rgba(255,255,255,0.3)" />
+                <Legend wrapperStyle={{ fontSize: 20 }} />
+                <Bar dataKey="itdActual" name="ITD Actual" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} />
+                <Bar dataKey="itdPlan" name="ITD Plan" fill="rgba(255,255,255,0.15)" radius={[4, 4, 0, 0] as [number, number, number, number]} stroke="rgba(255,255,255,0.3)" />
               </BarChart>
             </ResponsiveContainer>
           </div>
           <Section>Variance Detail</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 22 }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                   {["Category", "ITD Actual", "ITD Plan", "Variance"].map((h, i) => (
-                    <th key={i} style={{ padding: "12px 16px", textAlign: i === 0 ? "left" : "right", color: C.muted, fontWeight: 500, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                    <th key={i} style={{ padding: "22px 28px", textAlign: i === 0 ? "left" : "right", color: C.muted, fontWeight: 600, fontSize: 17, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -985,10 +1005,10 @@ export default function Dashboard() {
                   const v = r.p - r.a;
                   return (
                     <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: r.b ? "rgba(79,195,247,0.05)" : "transparent" }}>
-                      <td style={{ padding: "12px 16px", fontWeight: r.b ? 700 : 400 }}>{r.n}</td>
-                      <td style={{ padding: "12px 16px", textAlign: "right", fontFamily: "monospace", fontSize: 12 }}>{fmtFull(r.a)}</td>
-                      <td style={{ padding: "12px 16px", textAlign: "right", fontFamily: "monospace", fontSize: 12, color: C.muted }}>{fmtFull(r.p)}</td>
-                      <td style={{ padding: "12px 16px", textAlign: "right", fontFamily: "monospace", fontSize: 12, fontWeight: 600, color: v >= 0 ? C.green : C.red }}>{v >= 0 ? "+" : ""}{fmtFull(v)}</td>
+                      <td style={{ padding: "22px 28px", fontWeight: r.b ? 700 : 500, fontSize: 22 }}>{r.n}</td>
+                      <td style={{ padding: "22px 28px", textAlign: "right", fontFamily: "monospace", fontSize: 22 }}>{fmtFull(r.a)}</td>
+                      <td style={{ padding: "22px 28px", textAlign: "right", fontFamily: "monospace", fontSize: 22, color: C.muted }}>{fmtFull(r.p)}</td>
+                      <td style={{ padding: "22px 28px", textAlign: "right", fontFamily: "monospace", fontSize: 22, fontWeight: 700, color: v >= 0 ? C.green : C.red }}>{v >= 0 ? "+" : ""}{fmtFull(v)}</td>
                     </tr>
                   );
                 })}
@@ -1002,14 +1022,14 @@ export default function Dashboard() {
       {tab === "headcount" && (
         <>
           <Section>NTM Monthly Payroll Cost/Headcount</Section>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
-            <ResponsiveContainer width="100%" height={340}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(55vh, 720px)", minHeight: 380 }}>
+            <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={headcountData} margin={{ top: 32, right: 20, left: 10, bottom: 0 }}>
-                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 14, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
-                <YAxis yAxisId="cost" tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} domain={[0, 30000]} />
-                <YAxis yAxisId="hc" orientation="right" tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} axisLine={false} allowDecimals={false} domain={[0, 15]} />
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+                <YAxis yAxisId="cost" tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} domain={[0, 30000]} />
+                <YAxis yAxisId="hc" orientation="right" tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} axisLine={false} allowDecimals={false} domain={[0, 15]} />
                 <Tooltip content={<ChartTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Legend wrapperStyle={{ fontSize: 20 }} />
                 <Bar yAxisId="cost" dataKey="avgCost" name="Avg Cost / Employee" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={24} opacity={0.7}>
                   <LabelList dataKey="avgCost" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.text, fontSize: 11, fontFamily: "monospace", fontWeight: 600 }} />
                 </Bar>
@@ -1031,12 +1051,12 @@ export default function Dashboard() {
               <div key={idx} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "24px 28px", flex: "1 1 380px", minWidth: 380 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
                   <div>
-                    <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: C.muted }}>{idx === 0 ? "Next Month" : "Month After"}</div>
-                    <div style={{ fontSize: 22, fontWeight: 700 }}>{m.month}</div>
+                    <div style={{ fontSize: 16, textTransform: "uppercase", letterSpacing: "0.08em", color: C.muted, fontWeight: 600 }}>{idx === 0 ? "Next Month" : "Month After"}</div>
+                    <div style={{ fontSize: 36, fontWeight: 700, marginTop: 8 }}>{m.month}</div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 11, textTransform: "uppercase", color: C.muted }}>Total Cash Need</div>
-                    <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "monospace", color: C.orange }}>{fmt(m.total)}</div>
+                    <div style={{ fontSize: 16, textTransform: "uppercase", color: C.muted, fontWeight: 600 }}>Total Cash Need</div>
+                    <div style={{ fontSize: 44, fontWeight: 700, fontFamily: "monospace", color: C.orange, marginTop: 8 }}>{fmt(m.total)}</div>
                   </div>
                 </div>
 
@@ -1046,13 +1066,13 @@ export default function Dashboard() {
                   { label: "Corporate Development", val: m.corpDev, color: C.purple },
                   { label: "Project Development", val: m.projDev, color: C.green },
                 ]).map((item, j) => (
-                  <div key={j} style={{ marginBottom: 12 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                      <span style={{ fontSize: 12, color: C.muted }}>{item.label}</span>
-                      <span style={{ fontSize: 12, fontFamily: "monospace", fontWeight: 600 }}>{fmtFull(item.val)}</span>
+                  <div key={j} style={{ marginBottom: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontSize: 19, color: C.muted }}>{item.label}</span>
+                      <span style={{ fontSize: 19, fontFamily: "monospace", fontWeight: 600 }}>{fmtFull(item.val)}</span>
                     </div>
-                    <div style={{ height: 6, background: "#1e2430", borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ height: "100%", background: item.color, borderRadius: 3, width: `${Math.min((item.val / m.total) * 100, 100)}%`, transition: "width 0.4s" }} />
+                    <div style={{ height: 8, background: "#1e2430", borderRadius: 4, overflow: "hidden" }}>
+                      <div style={{ height: "100%", background: item.color, borderRadius: 4, width: `${Math.min((item.val / m.total) * 100, 100)}%`, transition: "width 0.4s" }} />
                     </div>
                   </div>
                 ))}
@@ -1062,13 +1082,13 @@ export default function Dashboard() {
 
           {/* Stacked bar comparison */}
           {next2.length === 2 && (
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
-              <ResponsiveContainer width="100%" height={280}>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(45vh, 600px)", minHeight: 320 }}>
+              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={next2} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
-                  <XAxis dataKey="month" tick={{ fill: C.muted, fontSize: 14 }} axisLine={{ stroke: "#1e2430" }} />
-                  <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
+                  <XAxis dataKey="month" tick={{ fill: C.muted, fontSize: 20 }} axisLine={{ stroke: "#1e2430" }} />
+                  <YAxis tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                   <Tooltip content={<ChartTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Legend wrapperStyle={{ fontSize: 20 }} />
                   <Bar dataKey="overhead" name="Corp Overhead" stackId="a" fill={C.blue} />
                   <Bar dataKey="corpDev" name="Corp Dev" stackId="a" fill={C.purple} />
                   <Bar dataKey="projDev" name="Project Dev" stackId="a" fill={C.green} radius={[4, 4, 0, 0] as [number, number, number, number]} />
@@ -1083,14 +1103,14 @@ export default function Dashboard() {
       {tab === "payroll" && (
         <>
           <Section>Quarterly Annualized Payroll + FTE</Section>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
-            <ResponsiveContainer width="100%" height={320}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(55vh, 720px)", minHeight: 380 }}>
+            <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={quarterlyPayroll} margin={{ top: 32, right: 20, left: 10, bottom: 0 }}>
-                <XAxis dataKey="quarter" tick={{ fill: C.text, fontSize: 14 }} axisLine={{ stroke: "#1e2430" }} />
-                <YAxis yAxisId="cost" tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
-                <YAxis yAxisId="fte" orientation="right" tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} axisLine={false} domain={[0, 14]} ticks={[0, 2, 4, 6, 8, 10, 12, 14]} />
+                <XAxis dataKey="quarter" tick={{ fill: C.text, fontSize: 20 }} axisLine={{ stroke: "#1e2430" }} />
+                <YAxis yAxisId="cost" tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
+                <YAxis yAxisId="fte" orientation="right" tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} axisLine={false} domain={[0, 14]} ticks={[0, 2, 4, 6, 8, 10, 12, 14]} />
                 <Tooltip content={<ChartTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Legend wrapperStyle={{ fontSize: 20 }} />
                 <Bar yAxisId="cost" dataKey="annualized" name="Annualized Payroll" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={36}>
                   <LabelList dataKey="annualized" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.text, fontSize: 11, fontFamily: "monospace", fontWeight: 600 }} />
                 </Bar>
@@ -1101,22 +1121,22 @@ export default function Dashboard() {
 
           <Section>Quarterly Detail</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 22 }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                   {["Quarter", "Annualized Payroll", "Quarterly Actual", "FTE", "Cost per FTE (Ann.)"].map((h, i) => (
-                    <th key={i} style={{ padding: "12px 16px", textAlign: i === 0 ? "left" : "right", color: C.muted, fontWeight: 500, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                    <th key={i} style={{ padding: "22px 28px", textAlign: i === 0 ? "left" : "right", color: C.muted, fontWeight: 600, fontSize: 17, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {quarterlyPayroll.map((q, i) => (
                   <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                    <td style={{ padding: "12px 16px", fontWeight: 600 }}>{q.quarter}</td>
-                    <td style={{ padding: "12px 16px", textAlign: "right", fontFamily: "monospace", fontSize: 12 }}>{fmtFull(q.annualized)}</td>
-                    <td style={{ padding: "12px 16px", textAlign: "right", fontFamily: "monospace", fontSize: 12, color: C.muted }}>{fmtFull(q.quarterly)}</td>
-                    <td style={{ padding: "12px 16px", textAlign: "right", fontFamily: "monospace", fontSize: 12 }}>{q.fte}</td>
-                    <td style={{ padding: "12px 16px", textAlign: "right", fontFamily: "monospace", fontSize: 12, color: C.blue }}>{q.fte > 0 ? fmtFull(Math.round(q.annualized / q.fte)) : "—"}</td>
+                    <td style={{ padding: "22px 28px", fontWeight: 700, fontSize: 22 }}>{q.quarter}</td>
+                    <td style={{ padding: "22px 28px", textAlign: "right", fontFamily: "monospace", fontSize: 22 }}>{fmtFull(q.annualized)}</td>
+                    <td style={{ padding: "22px 28px", textAlign: "right", fontFamily: "monospace", fontSize: 22, color: C.muted }}>{fmtFull(q.quarterly)}</td>
+                    <td style={{ padding: "22px 28px", textAlign: "right", fontFamily: "monospace", fontSize: 22 }}>{q.fte}</td>
+                    <td style={{ padding: "22px 28px", textAlign: "right", fontFamily: "monospace", fontSize: 22, color: C.blue }}>{q.fte > 0 ? fmtFull(Math.round(q.annualized / q.fte)) : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1129,14 +1149,14 @@ export default function Dashboard() {
       {tab === "projvsplan" && (
         <>
           <Section>NTM Monthly Spend: Projected vs. Plan</Section>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
-            <ResponsiveContainer width="100%" height={340}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(50vh, 720px)", minHeight: 380 }}>
+            <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={projVsPlanData} margin={{ top: 50, right: 20, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
-                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 14, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
-                <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+                <YAxis tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Legend wrapperStyle={{ fontSize: 20 }} />
                 <Bar dataKey="projected" name="Projected Spend" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={20}>
                   <LabelList dataKey="projected" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.blue, fontSize: 10, fontFamily: "monospace", fontWeight: 600 }} />
                 </Bar>
@@ -1148,18 +1168,18 @@ export default function Dashboard() {
           </div>
 
           <Section>NTM Cumulative Spend: Projected vs. Plan</Section>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
-            <ResponsiveContainer width="100%" height={300}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(40vh, 600px)", minHeight: 320 }}>
+            <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={projVsPlanData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="projG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.blue} stopOpacity={0.3} /><stop offset="95%" stopColor={C.blue} stopOpacity={0} /></linearGradient>
                   <linearGradient id="planG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.orange} stopOpacity={0.2} /><stop offset="95%" stopColor={C.orange} stopOpacity={0} /></linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" />
-                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 14, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
-                <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
+                <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={60} />
+                <YAxis tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Legend wrapperStyle={{ fontSize: 20 }} />
                 <Area type="monotone" dataKey="cumProjected" name="Cum. Projected" stroke={C.blue} fill="url(#projG)" strokeWidth={2} />
                 <Area type="monotone" dataKey="cumPlan" name="Cum. Plan" stroke={C.orange} fill="url(#planG)" strokeWidth={2} strokeDasharray="6 3" />
               </AreaChart>
@@ -1173,21 +1193,21 @@ export default function Dashboard() {
             const projTotal = last?.cumProjected ?? 0;
             const variance = planTotal - projTotal;
             return (
-              <div style={{ marginTop: 16, display: "flex", gap: 16, flexWrap: "wrap" }}>
-                <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", flex: 1, minWidth: 200 }}>
-                  <div style={{ fontSize: 11, textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>NTM Spend: Plan</div>
-                  <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "monospace" }}>{fmt(planTotal)}</div>
+              <div style={{ marginTop: 20, display: "flex", gap: 16, flexWrap: "wrap" }}>
+                <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "26px 30px", flex: 1, minWidth: 220 }}>
+                  <div style={{ fontSize: 17, textTransform: "uppercase", color: C.muted, marginBottom: 12, fontWeight: 600, letterSpacing: "0.06em" }}>NTM Spend: Plan</div>
+                  <div style={{ fontSize: 44, fontWeight: 700, fontFamily: "monospace" }}>{fmt(planTotal)}</div>
                 </div>
-                <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", flex: 1, minWidth: 200 }}>
-                  <div style={{ fontSize: 11, textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>NTM Spend: Projected</div>
-                  <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "monospace", color: projTotal > planTotal ? C.red : C.green }}>{fmt(projTotal)}</div>
+                <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "26px 30px", flex: 1, minWidth: 220 }}>
+                  <div style={{ fontSize: 17, textTransform: "uppercase", color: C.muted, marginBottom: 12, fontWeight: 600, letterSpacing: "0.06em" }}>NTM Spend: Projected</div>
+                  <div style={{ fontSize: 44, fontWeight: 700, fontFamily: "monospace", color: projTotal > planTotal ? C.red : C.green }}>{fmt(projTotal)}</div>
                 </div>
-                <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", flex: 1, minWidth: 200 }}>
-                  <div style={{ fontSize: 11, textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>Variance</div>
-                  <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "monospace", color: variance >= 0 ? C.green : C.red }}>
+                <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "26px 30px", flex: 1, minWidth: 220 }}>
+                  <div style={{ fontSize: 17, textTransform: "uppercase", color: C.muted, marginBottom: 12, fontWeight: 600, letterSpacing: "0.06em" }}>Variance</div>
+                  <div style={{ fontSize: 44, fontWeight: 700, fontFamily: "monospace", color: variance >= 0 ? C.green : C.red }}>
                     {variance >= 0 ? "+" : ""}{fmt(variance)}
                   </div>
-                  <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{variance >= 0 ? "Under plan" : "Over plan"}</div>
+                  <div style={{ fontSize: 19, color: C.muted, marginTop: 8 }}>{variance >= 0 ? "Under plan" : "Over plan"}</div>
                 </div>
               </div>
             );
@@ -1209,13 +1229,13 @@ export default function Dashboard() {
             <div style={{ display: "flex", gap: 14, marginBottom: 16, flexWrap: "wrap" }}>
               <KPI label="NTM Projected Fixed Expenses" value={fmt(ntmProjFixed)} sub={sub} good={variance <= 0} />
             </div>
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px" }}>
-              <ResponsiveContainer width="100%" height={420}>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(55vh, 720px)", minHeight: 380 }}>
+              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={fixedExpensesData} margin={{ top: 36, right: 20, left: 10, bottom: 0 }}>
-                  <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 14, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} />
-                  <YAxis tick={{ fill: C.muted, fontSize: 10, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
+                  <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} />
+                  <YAxis tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                   <Tooltip content={<ChartTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Legend wrapperStyle={{ fontSize: 20 }} />
                   <Bar dataKey="projected" name="Projected Fixed Expenses" fill={C.blue} radius={[3, 3, 0, 0] as [number, number, number, number]}>
                     <LabelList dataKey="projected" position="top" formatter={(v) => fmtLabel(Number(v))} style={{ fill: C.blue, fontSize: 10, fontFamily: "monospace", fontWeight: 600 }} />
                   </Bar>
@@ -1225,7 +1245,7 @@ export default function Dashboard() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ marginTop: 12, fontSize: 11, color: C.muted, fontStyle: "italic" }}>
+            <div style={{ marginTop: 14, fontSize: 14, color: C.muted, fontStyle: "italic" }}>
               * Fixed expenses includes: payroll, admin, office, and land carry.
             </div>
           </>
@@ -1233,12 +1253,12 @@ export default function Dashboard() {
       })()}
 
       {/* FOOTER */}
-      <div style={{ marginTop: 40, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, fontSize: 11, color: C.muted, flexWrap: "wrap" }}>
+      <div style={{ marginTop: 40, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, fontSize: 14, color: C.muted, flexWrap: "wrap" }}>
         <span>Actuals through {reviewLabel}</span>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span>Auto-refreshes every 5 min</span>
           <form action={logout}>
-            <button type="submit" style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
+            <button type="submit" style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 6, padding: "5px 14px", cursor: "pointer", fontSize: 14, fontFamily: "inherit" }}>
               Log out
             </button>
           </form>
