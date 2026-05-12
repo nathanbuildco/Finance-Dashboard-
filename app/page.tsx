@@ -275,9 +275,26 @@ function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; pi
   }
 
   const reviewRow = findRow(rows, "last day of month review");
-  let lastReviewSerial = 46112;
-  if (reviewRow) { for (const cell of reviewRow) { const v = parseFloat(cell); if (!isNaN(v) && v > 45000 && v < 50000) { lastReviewSerial = v; break; } } }
-  const lastReviewDate = new Date(1899, 11, 30 + lastReviewSerial);
+  // Default fallback if the row is missing entirely.
+  let lastReviewDate = new Date(1899, 11, 30 + 46112);
+  if (reviewRow) {
+    for (const rawCell of reviewRow) {
+      const cell = (rawCell || "").trim();
+      if (!cell) continue;
+      // 1) Excel serial number (e.g. 46112).
+      const v = parseFloat(cell);
+      if (!isNaN(v) && v >= 45000 && v < 50000) {
+        lastReviewDate = new Date(1899, 11, 30 + v);
+        break;
+      }
+      // 2) Text date string (M/D/YYYY, MM/DD/YYYY, "Month DD, YYYY", etc.).
+      const parsed = new Date(cell);
+      if (!isNaN(parsed.getTime()) && parsed.getFullYear() >= 2020 && parsed.getFullYear() <= 2050) {
+        lastReviewDate = parsed;
+        break;
+      }
+    }
+  }
   const reviewLabel = lastReviewDate.toLocaleString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
 
   const months: MonthData[] = [];
