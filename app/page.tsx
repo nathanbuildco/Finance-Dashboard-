@@ -17,6 +17,64 @@ const SHEET_CSV_URL =
 const PLAN_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTlUqIymbq_OgJ70EoO2uARD86PqF5vKmG_CzYTyzSzxdEXGTtk3mgRf7NhecnaXjhdTpyor_e3-NJ5/pub?gid=1750179845&single=true&output=csv";
 
+// ── Land Acquisitions ─────────────────────────────────────────────────────
+// MANUAL UPDATE: paste the latest Cash Requirements rows from the deal sheet here each month.
+// Date format: YYYY-MM-DD (the dashboard parses by year + month index).
+interface LandTxn { deal: string; date: string; type: string; amount: number }
+const LAND_ACQUISITIONS: LandTxn[] = [
+  // Snider
+  { deal: "Snider", date: "2026-02-02", type: "Contingency Ext.", amount: 250000 },
+  { deal: "Snider", date: "2026-03-26", type: "Closing Cost", amount: -375000 },
+  { deal: "Snider", date: "2026-03-31", type: "Close Extension", amount: 25000 },
+  { deal: "Snider", date: "2026-04-15", type: "Closing", amount: 10484521 },
+  // Lockwood
+  { deal: "Lockwood", date: "2026-01-20", type: "Close Extension", amount: 200000 },
+  { deal: "Lockwood", date: "2026-01-20", type: "Closing Cost", amount: -212500 },
+  { deal: "Lockwood", date: "2026-03-31", type: "Closing", amount: 17307075 },
+  // Sattar
+  { deal: "Sattar", date: "2026-01-16", type: "Contingency Ext.", amount: 10000 },
+  { deal: "Sattar", date: "2026-04-01", type: "Closing", amount: 721543 },
+  // Kam Land
+  { deal: "Kam Land", date: "2026-05-05", type: "Addl. Deposit", amount: 990000 },
+  { deal: "Kam Land", date: "2026-06-01", type: "Closing", amount: 11209388 },
+  // 702 FM 1209
+  { deal: "702 FM 1209", date: "2026-03-16", type: "Initial Deposit", amount: 2000 },
+  { deal: "702 FM 1209", date: "2026-04-10", type: "Contingency Ext.", amount: 200 },
+  { deal: "702 FM 1209", date: "2026-05-29", type: "Closing", amount: 127152 },
+  // Jason Alley
+  { deal: "Jason Alley", date: "2026-01-30", type: "Initial Deposit", amount: 100000 },
+  { deal: "Jason Alley", date: "2026-05-18", type: "Addl. Deposit", amount: 250000 },
+  { deal: "Jason Alley", date: "2026-08-17", type: "Closing", amount: 34666700 },
+  // H&PB Basco
+  { deal: "H&PB Basco", date: "2026-03-05", type: "Initial Deposit", amount: 258749 },
+  { deal: "H&PB Basco", date: "2026-06-01", type: "Contingency Ext.", amount: 100000 },
+  { deal: "H&PB Basco", date: "2026-06-30", type: "Addl. Deposit", amount: 1034997 },
+  { deal: "H&PB Basco", date: "2026-08-28", type: "Close Extension", amount: 2199369 },
+  { deal: "H&PB Basco", date: "2026-11-30", type: "Closing", amount: 111929683 },
+  // Tex Mix
+  { deal: "Tex Mix", date: "2026-03-05", type: "Initial Deposit", amount: 241251 },
+  { deal: "Tex Mix", date: "2026-06-01", type: "Contingency Ext.", amount: 100000 },
+  { deal: "Tex Mix", date: "2026-06-30", type: "Addl. Deposit", amount: 965003 },
+  { deal: "Tex Mix", date: "2026-08-28", type: "Close Extension", amount: 2050631 },
+  { deal: "Tex Mix", date: "2026-11-30", type: "Closing", amount: 104120321 },
+  // Hunt Land
+  { deal: "Hunt Land", date: "2026-05-07", type: "Initial Deposit", amount: 500000 },
+  { deal: "Hunt Land", date: "2026-07-22", type: "Addl. Deposit", amount: 500000 },
+  { deal: "Hunt Land", date: "2026-10-12", type: "Close Extension", amount: 250000 },
+  { deal: "Hunt Land", date: "2026-11-18", type: "Closing", amount: 37903000 },
+];
+
+function getLandForMonth(monthLabel: string): LandTxn[] {
+  const d = parseMonthLabel(monthLabel);
+  if (!d) return [];
+  const yr = d.getFullYear();
+  const mo = d.getMonth();
+  return LAND_ACQUISITIONS.filter(t => {
+    const parts = t.date.split("-").map(Number);
+    return parts[0] === yr && (parts[1] - 1) === mo;
+  });
+}
+
 // Summary/rollup row labels excluded when computing top line-item expenses.
 const SUMMARY_ROW_LABELS = new Set([
   // Category rollups
@@ -1064,53 +1122,111 @@ export default function Dashboard() {
 
           {/* Cash Needs Cards */}
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
-            {next2.map((m, idx) => (
-              <div key={idx} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "24px 28px", flex: "1 1 380px", minWidth: 380 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                  <div>
-                    <div style={{ fontSize: 36, fontWeight: 700 }}>{m.month}</div>
+            {next2.map((m, idx) => {
+              const landTxns = getLandForMonth(m.month);
+              const landTotal = landTxns.reduce((s, t) => s + t.amount, 0);
+              const totalCashNeed = m.total + landTotal;
+              return (
+                <div key={idx} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "24px 28px", flex: "1 1 380px", minWidth: 380 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                    <div>
+                      <div style={{ fontSize: 36, fontWeight: 700 }}>{m.month}</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 16, textTransform: "uppercase", color: C.muted, fontWeight: 600 }}>Total Cash Need</div>
+                      <div style={{ fontSize: 44, fontWeight: 700, fontFamily: "monospace", color: C.orange, marginTop: 8 }}>{fmt(totalCashNeed)}</div>
+                    </div>
                   </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 16, textTransform: "uppercase", color: C.muted, fontWeight: 600 }}>Total Cash Need</div>
-                    <div style={{ fontSize: 44, fontWeight: 700, fontFamily: "monospace", color: C.orange, marginTop: 8 }}>{fmt(m.total)}</div>
-                  </div>
-                </div>
 
-                {/* Breakdown bars */}
-                {([
-                  { label: "Corporate Overhead", val: m.overhead, color: C.blue },
-                  { label: "Corporate Development", val: m.corpDev, color: C.purple },
-                  { label: "Project Development", val: m.projDev, color: C.green },
-                ]).map((item, j) => (
-                  <div key={j} style={{ marginBottom: 16 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                      <span style={{ fontSize: 19, color: C.muted }}>{item.label}</span>
-                      <span style={{ fontSize: 19, fontFamily: "monospace", fontWeight: 600 }}>{fmtFull(item.val)}</span>
+                  {/* Breakdown bars */}
+                  {([
+                    { label: "Corporate Overhead", val: m.overhead, color: C.blue },
+                    { label: "Corporate Development", val: m.corpDev, color: C.purple },
+                    { label: "Project Development", val: m.projDev, color: C.green },
+                    { label: "Land Acquisitions", val: landTotal, color: C.orange },
+                  ]).map((item, j) => (
+                    <div key={j} style={{ marginBottom: 16 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                        <span style={{ fontSize: 19, color: C.muted }}>{item.label}</span>
+                        <span style={{ fontSize: 19, fontFamily: "monospace", fontWeight: 600 }}>{fmtFull(item.val)}</span>
+                      </div>
+                      <div style={{ height: 8, background: "#1e2430", borderRadius: 4, overflow: "hidden" }}>
+                        <div style={{ height: "100%", background: item.color, borderRadius: 4, width: `${totalCashNeed > 0 ? Math.min((item.val / totalCashNeed) * 100, 100) : 0}%`, transition: "width 0.4s" }} />
+                      </div>
                     </div>
-                    <div style={{ height: 8, background: "#1e2430", borderRadius: 4, overflow: "hidden" }}>
-                      <div style={{ height: "100%", background: item.color, borderRadius: 4, width: `${Math.min((item.val / m.total) * 100, 100)}%`, transition: "width 0.4s" }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ))}
+                  ))}
+                </div>
+              );
+            })}
           </div>
 
           {/* Stacked bar comparison */}
           {next2.length === 2 && (
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(45vh, 600px)", minHeight: 320 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={next2} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
+                <BarChart
+                  data={next2.map(m => ({
+                    ...m,
+                    land: getLandForMonth(m.month).reduce((s, t) => s + t.amount, 0),
+                  }))}
+                  margin={{ top: 10, right: 30, left: 10, bottom: 0 }}
+                >
                   <XAxis dataKey="month" tick={{ fill: C.muted, fontSize: 20 }} axisLine={{ stroke: "#1e2430" }} />
                   <YAxis tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                   <Tooltip content={<ChartTooltip />} />
                   <Legend wrapperStyle={{ fontSize: 20 }} />
                   <Bar dataKey="overhead" name="Corp Overhead" stackId="a" fill={C.blue} />
                   <Bar dataKey="corpDev" name="Corp Dev" stackId="a" fill={C.purple} />
-                  <Bar dataKey="projDev" name="Project Dev" stackId="a" fill={C.green} radius={[4, 4, 0, 0] as [number, number, number, number]} />
+                  <Bar dataKey="projDev" name="Project Dev" stackId="a" fill={C.green} />
+                  <Bar dataKey="land" name="Land Acquisitions" stackId="a" fill={C.orange} radius={[4, 4, 0, 0] as [number, number, number, number]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
+          )}
+
+          {/* Land Acquisitions deal-level detail for the same 2 months */}
+          {next2.some(m => getLandForMonth(m.month).length > 0) && (
+            <>
+              <Section>Land Acquisitions — Detail</Section>
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                {next2.map((m, idx) => {
+                  const txns = getLandForMonth(m.month);
+                  if (txns.length === 0) return null;
+                  const monthTotal = txns.reduce((s, t) => s + t.amount, 0);
+                  return (
+                    <div key={idx} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "24px 28px", flex: "1 1 380px", minWidth: 380 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                        <div style={{ fontSize: 28, fontWeight: 700 }}>{m.month}</div>
+                        <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "monospace", color: C.orange }}>{fmt(monthTotal)}</div>
+                      </div>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 18 }}>
+                        <thead>
+                          <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                            {["Deal", "Date", "Type", "Amount"].map((h, i) => (
+                              <th key={i} style={{ padding: "10px 8px", textAlign: i === 3 ? "right" : "left", color: C.muted, fontWeight: 600, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {txns.map((t, i) => {
+                            const [y, mo, d] = t.date.split("-").map(Number);
+                            const dateLabel = `${mo}/${d}/${String(y).slice(2)}`;
+                            return (
+                              <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                                <td style={{ padding: "10px 8px", fontWeight: 600 }}>{t.deal}</td>
+                                <td style={{ padding: "10px 8px", color: C.muted, fontFamily: "monospace" }}>{dateLabel}</td>
+                                <td style={{ padding: "10px 8px", color: C.muted }}>{t.type}</td>
+                                <td style={{ padding: "10px 8px", textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>{fmtFull(t.amount)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </>
       )}
