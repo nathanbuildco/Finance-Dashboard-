@@ -1068,8 +1068,7 @@ export default function Dashboard() {
               <div key={idx} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "24px 28px", flex: "1 1 380px", minWidth: 380 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
                   <div>
-                    <div style={{ fontSize: 16, textTransform: "uppercase", letterSpacing: "0.08em", color: C.muted, fontWeight: 600 }}>{idx === 0 ? "Next Month" : "Month After"}</div>
-                    <div style={{ fontSize: 36, fontWeight: 700, marginTop: 8 }}>{m.month}</div>
+                    <div style={{ fontSize: 36, fontWeight: 700 }}>{m.month}</div>
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontSize: 16, textTransform: "uppercase", color: C.muted, fontWeight: 600 }}>Total Cash Need</div>
