@@ -1034,7 +1034,7 @@ export default function Dashboard() {
     { id: "payroll", label: "Payroll" },
     { id: "projvsplan", label: "Proj vs Plan" },
     { id: "fixed", label: "Fixed Expenses" },
-    { id: "portfolio", label: "Portfolio" },
+    { id: "portfolio", label: "Investment Portfolio" },
   ];
 
   return (
