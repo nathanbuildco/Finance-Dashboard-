@@ -1128,13 +1128,13 @@ export default function Dashboard() {
               const totalCashNeed = m.total + landTotal;
               return (
                 <div key={idx} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "24px 28px", flex: "1 1 380px", minWidth: 380 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                     <div>
                       <div style={{ fontSize: 36, fontWeight: 700 }}>{m.month}</div>
                     </div>
                     <div style={{ textAlign: "right" }}>
                       <div style={{ fontSize: 16, textTransform: "uppercase", color: C.muted, fontWeight: 600 }}>Total Cash Need</div>
-                      <div style={{ fontSize: 44, fontWeight: 700, fontFamily: "monospace", color: C.orange, marginTop: 8 }}>{fmt(totalCashNeed)}</div>
+                      <div style={{ fontSize: 44, fontWeight: 700, fontFamily: "monospace", color: C.text, marginTop: 8 }}>{fmt(totalCashNeed)}</div>
                     </div>
                   </div>
 
@@ -1174,7 +1174,24 @@ export default function Dashboard() {
                   <XAxis dataKey="month" tick={{ fill: C.muted, fontSize: 20 }} axisLine={{ stroke: "#1e2430" }} />
                   <YAxis tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                   <Tooltip content={<ChartTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 20 }} />
+                  <Legend
+                    wrapperStyle={{ fontSize: 20 }}
+                    content={() => (
+                      <ul style={{ display: "flex", justifyContent: "center", gap: 28, listStyle: "none", padding: 0, margin: "12px 0 0" }}>
+                        {[
+                          { label: "Corp Overhead", color: C.blue },
+                          { label: "Corp Dev", color: C.purple },
+                          { label: "Project Dev", color: C.green },
+                          { label: "Land Acquisitions", color: C.orange },
+                        ].map((k, i) => (
+                          <li key={i} style={{ display: "flex", alignItems: "center", gap: 10, color: k.color, fontSize: 20 }}>
+                            <span style={{ display: "inline-block", width: 16, height: 16, background: k.color, borderRadius: 3 }} />
+                            {k.label}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  />
                   <Bar dataKey="overhead" name="Corp Overhead" stackId="a" fill={C.blue} />
                   <Bar dataKey="corpDev" name="Corp Dev" stackId="a" fill={C.purple} />
                   <Bar dataKey="projDev" name="Project Dev" stackId="a" fill={C.green} />
