@@ -5,7 +5,19 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(git remote *)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Bash(git config *)",
+      "Bash(git push *)",
+      "Bash(npx tsc *)",
+      "Bash(git revert *)",
+      "Bash(cp app/page.tsx ~/Desktop/page.tsx)",
+      "Read(//c/Users/Nathan/Desktop/**)",
+      "Bash(npm run *)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(npx tsx *)",
+      "Bash(npx eslint *)",
+      "Bash(vercel --version)"
     ]
   }
 }

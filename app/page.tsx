@@ -540,6 +540,264 @@ function Section({ children }: { children: React.ReactNode }) {
 }
 
 // ══════════════════════════════════════════════
+// PORTFOLIO TAB
+// ══════════════════════════════════════════════
+interface PortfolioSnapshot {
+  statementDate: string;
+  account: string;
+  accountName: string;
+  ticker: string;
+  description: string;
+  shares: number;
+  costBasis: number;
+  marketValue: number;
+  unrealized: number;
+  uploadedAt: string;
+}
+
+interface WaterfallBar {
+  name: string;
+  base: number;
+  delta: number;
+  signed: number;
+  color: string;
+  isPillar: boolean;
+}
+
+function buildWaterfall(rows: PortfolioSnapshot[]): { bars: WaterfallBar[]; nav: number } {
+  const sorted = [...rows].sort((a, b) => a.ticker.localeCompare(b.ticker));
+  const nav = sorted.reduce((s, h) => s + h.marketValue, 0);
+  const bars: WaterfallBar[] = [];
+  let running = 0;
+  for (const h of sorted) {
+    bars.push({
+      name: `${h.ticker} cost`,
+      base: running,
+      delta: h.costBasis,
+      signed: h.costBasis,
+      color: C.blue,
+      isPillar: false,
+    });
+    running += h.costBasis;
+    const pl = h.marketValue - h.costBasis;
+    const next = running + pl;
+    bars.push({
+      name: `${h.ticker} P&L`,
+      base: Math.min(running, next),
+      delta: Math.abs(pl),
+      signed: pl,
+      color: pl >= 0 ? C.green : C.red,
+      isPillar: false,
+    });
+    running = next;
+  }
+  bars.push({ name: "Total NAV", base: 0, delta: nav, signed: nav, color: C.purple, isPillar: true });
+  return { bars, nav };
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const WaterfallTooltip = ({ active, payload }: any) => {
+  if (!active || !payload?.length) return null;
+  const bar: WaterfallBar = payload[0].payload;
+  const sign = bar.signed >= 0 ? "+" : "−";
+  return (
+    <div style={{ background: "#1a1f2e", border: "1px solid #2a3040", borderRadius: 10, padding: "14px 18px", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
+      <div style={{ color: C.text, fontWeight: 700, fontSize: 18, marginBottom: 8 }}>{bar.name}</div>
+      <div style={{ color: bar.color, fontSize: 16, fontFamily: "monospace" }}>
+        {bar.isPillar ? fmtFull(bar.signed) : `${sign}${fmtFull(Math.abs(bar.signed))}`}
+      </div>
+    </div>
+  );
+};
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+function PortfolioTab() {
+  const [snapshots, setSnapshots] = useState<PortfolioSnapshot[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await fetch("/api/portfolio/snapshots", { cache: "no-store" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const rows: PortfolioSnapshot[] = data.snapshots || [];
+      setSnapshots(rows);
+      const dates = Array.from(new Set(rows.map(r => r.statementDate))).sort();
+      if (dates.length > 0 && !selectedDate) setSelectedDate(dates[dates.length - 1]);
+      setErr(null);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedDate]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const dates = useMemo(
+    () => Array.from(new Set(snapshots.map(s => s.statementDate))).sort(),
+    [snapshots],
+  );
+  const activeDate = selectedDate || dates[dates.length - 1] || "";
+  const currentRows = useMemo(
+    () => snapshots.filter(s => s.statementDate === activeDate),
+    [snapshots, activeDate],
+  );
+  const { bars, nav } = useMemo(() => buildWaterfall(currentRows), [currentRows]);
+  const totalCost = currentRows.reduce((s, h) => s + h.costBasis, 0);
+  const totalPL = nav - totalCost;
+
+  async function handleUpload(file: File) {
+    setUploading(true);
+    setUploadMsg(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/portfolio/upload", { method: "POST", body: fd });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      const removed = body.sheet?.removed ?? 0;
+      const appended = body.sheet?.appended ?? 0;
+      setUploadMsg(
+        `Saved ${appended} holdings for ${body.statementDate} (NAV ${fmtFull(body.nav)})${
+          removed > 0 ? ` — replaced ${removed} prior row${removed === 1 ? "" : "s"}` : ""
+        }.`,
+      );
+      setSelectedDate(body.statementDate);
+      await load();
+    } catch (e) {
+      setUploadMsg(`Error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <>
+      <Section>Investment Portfolio</Section>
+
+      {/* Upload control */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 12, cursor: uploading ? "wait" : "pointer", background: uploading ? C.border : C.blue, color: C.bg, padding: "10px 22px", borderRadius: 8, fontWeight: 600, fontSize: 16 }}>
+          {uploading ? "Parsing…" : "Upload J.P. Morgan statement"}
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            disabled={uploading}
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleUpload(f);
+              e.target.value = "";
+            }}
+          />
+        </label>
+        {dates.length > 0 && (
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 10, color: C.muted, fontSize: 15 }}>
+            Statement date:
+            <select
+              value={activeDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              style={{ background: C.bg, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 10px", fontSize: 15, fontFamily: "monospace" }}
+            >
+              {dates.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </label>
+        )}
+        {uploadMsg && (
+          <span style={{ color: uploadMsg.startsWith("Error") ? C.red : C.green, fontSize: 15 }}>{uploadMsg}</span>
+        )}
+      </div>
+
+      {loading && <div style={{ color: C.muted, marginTop: 24 }}>Loading snapshots…</div>}
+      {err && <div style={{ color: C.red, marginTop: 24 }}>{err}</div>}
+
+      {!loading && !err && currentRows.length === 0 && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "32px 28px", marginTop: 24, color: C.muted, fontSize: 16 }}>
+          No portfolio snapshots yet. Upload a statement PDF above to create the first one.
+        </div>
+      )}
+
+      {currentRows.length > 0 && (
+        <>
+          <div style={{ display: "flex", gap: 14, marginTop: 18, flexWrap: "wrap" }}>
+            <KPI label="NAV" value={fmtFull(nav)} sub={activeDate} />
+            <KPI label="Cost Basis" value={fmtFull(totalCost)} />
+            <KPI label="Unrealized G/L" value={fmtFull(totalPL)} color={totalPL >= 0 ? C.green : C.red} />
+            <KPI label="Positions" value={String(currentRows.length)} />
+          </div>
+
+          <Section>Cost → Market Value Bridge</Section>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(60vh, 720px)", minHeight: 420 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={bars} margin={{ top: 48, right: 30, left: 10, bottom: 30 }}>
+                <CartesianGrid stroke="#1e2430" vertical={false} />
+                <XAxis dataKey="name" tick={{ fill: C.text, fontSize: 16 }} axisLine={{ stroke: "#1e2430" }} angle={-25} textAnchor="end" height={70} interval={0} />
+                <YAxis tick={{ fill: C.muted, fontSize: 15, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
+                <Tooltip content={<WaterfallTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+                <Bar dataKey="base" stackId="w" fill="transparent" isAnimationActive={false} />
+                <Bar dataKey="delta" stackId="w" isAnimationActive={false}>
+                  {bars.map((b, i) => <Cell key={i} fill={b.color} />)}
+                  <LabelList
+                    dataKey="signed"
+                    position="top"
+                    formatter={(v) => (typeof v === "number" ? fmtLabel(v) : "")}
+                    fill={C.text}
+                    fontSize={22}
+                    fontWeight={700}
+                    fontFamily="monospace"
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <Section>Holdings</Section>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 24px" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 17 }}>
+              <thead>
+                <tr style={{ color: C.muted, textAlign: "left", borderBottom: `1px solid ${C.border}` }}>
+                  <th style={{ padding: "10px 8px" }}>Ticker</th>
+                  <th style={{ padding: "10px 8px" }}>Description</th>
+                  <th style={{ padding: "10px 8px" }}>Account</th>
+                  <th style={{ padding: "10px 8px", textAlign: "right" }}>Shares</th>
+                  <th style={{ padding: "10px 8px", textAlign: "right" }}>Cost</th>
+                  <th style={{ padding: "10px 8px", textAlign: "right" }}>Market Value</th>
+                  <th style={{ padding: "10px 8px", textAlign: "right" }}>Unrealized</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...currentRows].sort((a, b) => b.marketValue - a.marketValue).map((h, i) => (
+                  <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, fontFamily: "monospace" }}>
+                    <td style={{ padding: "10px 8px", fontWeight: 700, color: C.text }}>{h.ticker}</td>
+                    <td style={{ padding: "10px 8px", color: C.muted, fontFamily: "inherit" }}>{h.description}</td>
+                    <td style={{ padding: "10px 8px", color: C.muted, fontFamily: "inherit" }}>{h.accountName}</td>
+                    <td style={{ padding: "10px 8px", textAlign: "right", color: C.text }}>{h.shares.toLocaleString()}</td>
+                    <td style={{ padding: "10px 8px", textAlign: "right", color: C.text }}>{fmtFull(h.costBasis)}</td>
+                    <td style={{ padding: "10px 8px", textAlign: "right", color: C.text }}>{fmtFull(h.marketValue)}</td>
+                    <td style={{ padding: "10px 8px", textAlign: "right", color: h.unrealized >= 0 ? C.green : C.red }}>
+                      {h.unrealized >= 0 ? "+" : "−"}{fmtFull(Math.abs(h.unrealized))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+// ══════════════════════════════════════════════
 // MAIN DASHBOARD
 // ══════════════════════════════════════════════
 export default function Dashboard() {
@@ -776,6 +1034,7 @@ export default function Dashboard() {
     { id: "payroll", label: "Payroll" },
     { id: "projvsplan", label: "Proj vs Plan" },
     { id: "fixed", label: "Fixed Expenses" },
+    { id: "portfolio", label: "Portfolio" },
   ];
 
   return (
@@ -1400,6 +1659,8 @@ export default function Dashboard() {
           </>
         );
       })()}
+
+      {tab === "portfolio" && <PortfolioTab />}
 
       {/* FOOTER */}
       <div style={{ marginTop: 40, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, fontSize: 14, color: C.muted, flexWrap: "wrap" }}>
