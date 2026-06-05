@@ -1,5 +1,6 @@
 import { google, sheets_v4 } from "googleapis";
 import type { Holding, ParsedStatement } from "./portfolio-parser";
+import type { LandTxn } from "./land-parser";
 
 export const PORTFOLIO_TAB = "Portfolio";
 export const PORTFOLIO_HEADERS = [
@@ -15,6 +16,15 @@ export const PORTFOLIO_HEADERS = [
   "Uploaded At",
 ] as const;
 
+export const LAND_TAB = "Land Acquisitions";
+export const LAND_HEADERS = [
+  "Deal",
+  "Date",
+  "Type",
+  "Amount",
+  "Uploaded At",
+] as const;
+
 export interface SnapshotRow {
   statementDate: string;
   account: string;
@@ -25,6 +35,14 @@ export interface SnapshotRow {
   costBasis: number;
   marketValue: number;
   unrealized: number;
+  uploadedAt: string;
+}
+
+export interface LandRow {
+  deal: string;
+  date: string;
+  type: string;
+  amount: number;
   uploadedAt: string;
 }
 
@@ -208,5 +226,119 @@ export async function listSnapshots(): Promise<SnapshotRow[]> {
       marketValue: Number(r[7] ?? 0),
       unrealized: Number(r[8] ?? 0),
       uploadedAt: String(r[9] ?? ""),
+    }));
+}
+
+async function ensureLandTab(
+  sheets: sheets_v4.Sheets,
+  spreadsheetId: string,
+): Promise<number> {
+  let sheetId = await getTabSheetId(sheets, spreadsheetId, LAND_TAB);
+  if (sheetId !== null) return sheetId;
+
+  const created = await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [{ addSheet: { properties: { title: LAND_TAB } } }],
+    },
+  });
+  sheetId = created.data.replies?.[0]?.addSheet?.properties?.sheetId ?? null;
+  if (sheetId === null) throw new Error("Failed to create Land Acquisitions tab.");
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `${LAND_TAB}!A1`,
+    valueInputOption: "RAW",
+    requestBody: { values: [LAND_HEADERS as unknown as string[]] },
+  });
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          repeatCell: {
+            range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
+            cell: {
+              userEnteredFormat: {
+                textFormat: { bold: true },
+                horizontalAlignment: "CENTER",
+              },
+            },
+            fields: "userEnteredFormat(textFormat,horizontalAlignment)",
+          },
+        },
+        {
+          updateSheetProperties: {
+            properties: { sheetId, gridProperties: { frozenRowCount: 1 } },
+            fields: "gridProperties.frozenRowCount",
+          },
+        },
+      ],
+    },
+  });
+
+  return sheetId;
+}
+
+export async function replaceLandAcquisitions(
+  txns: LandTxn[],
+): Promise<{ cleared: number; appended: number }> {
+  const { sheets, spreadsheetId } = getSheetsClient();
+  await ensureLandTab(sheets, spreadsheetId);
+
+  const existing = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${LAND_TAB}!A2:A`,
+  });
+  const cleared = (existing.data.values ?? []).length;
+
+  if (cleared > 0) {
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId,
+      range: `${LAND_TAB}!A2:E`,
+    });
+  }
+
+  const uploadedAt = new Date().toISOString();
+  const rows: (string | number)[][] = txns.map((t) => [
+    t.deal,
+    t.date,
+    t.type,
+    t.amount,
+    uploadedAt,
+  ]);
+
+  if (rows.length > 0) {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: `${LAND_TAB}!A1`,
+      valueInputOption: "RAW",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: { values: rows },
+    });
+  }
+
+  return { cleared, appended: rows.length };
+}
+
+export async function listLandAcquisitions(): Promise<LandRow[]> {
+  const { sheets, spreadsheetId } = getSheetsClient();
+  const tab = await getTabSheetId(sheets, spreadsheetId, LAND_TAB);
+  if (tab === null) return [];
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${LAND_TAB}!A2:E`,
+  });
+  const rows = res.data.values ?? [];
+  return rows
+    .filter((r) => r.length >= 4 && r[0] && r[1])
+    .map((r) => ({
+      deal: String(r[0]),
+      date: String(r[1]),
+      type: String(r[2] ?? ""),
+      amount: Number(r[3] ?? 0),
+      uploadedAt: String(r[4] ?? ""),
     }));
 }

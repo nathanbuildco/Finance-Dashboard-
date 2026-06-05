@@ -18,58 +18,16 @@ const PLAN_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTlUqIymbq_OgJ70EoO2uARD86PqF5vKmG_CzYTyzSzxdEXGTtk3mgRf7NhecnaXjhdTpyor_e3-NJ5/pub?gid=1750179845&single=true&output=csv";
 
 // ── Land Acquisitions ─────────────────────────────────────────────────────
-// MANUAL UPDATE: paste the latest Cash Requirements rows from the deal sheet here each month.
-// Date format: YYYY-MM-DD (the dashboard parses by year + month index).
+// Data lives in the "Land Acquisitions" tab of the linked Google Sheet.
+// Upload a screenshot of the deal sheet on the Cash Needs tab to refresh it.
 interface LandTxn { deal: string; date: string; type: string; amount: number }
-const LAND_ACQUISITIONS: LandTxn[] = [
-  // Snider
-  { deal: "Snider", date: "2026-02-02", type: "Contingency Ext.", amount: 250000 },
-  { deal: "Snider", date: "2026-03-26", type: "Closing Cost", amount: -375000 },
-  { deal: "Snider", date: "2026-03-31", type: "Close Extension", amount: 25000 },
-  { deal: "Snider", date: "2026-04-15", type: "Closing", amount: 10484521 },
-  // Lockwood
-  { deal: "Lockwood", date: "2026-01-20", type: "Close Extension", amount: 200000 },
-  { deal: "Lockwood", date: "2026-01-20", type: "Closing Cost", amount: -212500 },
-  { deal: "Lockwood", date: "2026-03-31", type: "Closing", amount: 17307075 },
-  // Sattar
-  { deal: "Sattar", date: "2026-01-16", type: "Contingency Ext.", amount: 10000 },
-  { deal: "Sattar", date: "2026-04-01", type: "Closing", amount: 721543 },
-  // Kam Land
-  { deal: "Kam Land", date: "2026-05-05", type: "Addl. Deposit", amount: 990000 },
-  { deal: "Kam Land", date: "2026-06-01", type: "Closing", amount: 11209388 },
-  // 702 FM 1209
-  { deal: "702 FM 1209", date: "2026-03-16", type: "Initial Deposit", amount: 2000 },
-  { deal: "702 FM 1209", date: "2026-04-10", type: "Contingency Ext.", amount: 200 },
-  { deal: "702 FM 1209", date: "2026-05-29", type: "Closing", amount: 127152 },
-  // Jason Alley
-  { deal: "Jason Alley", date: "2026-01-30", type: "Initial Deposit", amount: 100000 },
-  { deal: "Jason Alley", date: "2026-05-18", type: "Addl. Deposit", amount: 250000 },
-  { deal: "Jason Alley", date: "2026-08-17", type: "Closing", amount: 34666700 },
-  // H&PB Basco
-  { deal: "H&PB Basco", date: "2026-03-05", type: "Initial Deposit", amount: 258749 },
-  { deal: "H&PB Basco", date: "2026-06-01", type: "Contingency Ext.", amount: 100000 },
-  { deal: "H&PB Basco", date: "2026-06-30", type: "Addl. Deposit", amount: 1034997 },
-  { deal: "H&PB Basco", date: "2026-08-28", type: "Close Extension", amount: 2199369 },
-  { deal: "H&PB Basco", date: "2026-11-30", type: "Closing", amount: 111929683 },
-  // Tex Mix
-  { deal: "Tex Mix", date: "2026-03-05", type: "Initial Deposit", amount: 241251 },
-  { deal: "Tex Mix", date: "2026-06-01", type: "Contingency Ext.", amount: 100000 },
-  { deal: "Tex Mix", date: "2026-06-30", type: "Addl. Deposit", amount: 965003 },
-  { deal: "Tex Mix", date: "2026-08-28", type: "Close Extension", amount: 2050631 },
-  { deal: "Tex Mix", date: "2026-11-30", type: "Closing", amount: 104120321 },
-  // Hunt Land
-  { deal: "Hunt Land", date: "2026-05-07", type: "Initial Deposit", amount: 500000 },
-  { deal: "Hunt Land", date: "2026-07-22", type: "Addl. Deposit", amount: 500000 },
-  { deal: "Hunt Land", date: "2026-10-12", type: "Close Extension", amount: 250000 },
-  { deal: "Hunt Land", date: "2026-11-18", type: "Closing", amount: 37903000 },
-];
 
-function getLandForMonth(monthLabel: string): LandTxn[] {
+function getLandForMonth(monthLabel: string, txns: LandTxn[]): LandTxn[] {
   const d = parseMonthLabel(monthLabel);
   if (!d) return [];
   const yr = d.getFullYear();
   const mo = d.getMonth();
-  return LAND_ACQUISITIONS.filter(t => {
+  return txns.filter(t => {
     const parts = t.date.split("-").map(Number);
     return parts[0] === yr && (parts[1] - 1) === mo;
   });
@@ -808,8 +766,46 @@ export default function Dashboard() {
   const [ntmProj, setNtmProj] = useState<PitchDeck | null>(null);
   const [planMonths, setPlanMonths] = useState<PlanMonth[]>([]);
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
+  const [landTxns, setLandTxns] = useState<LandTxn[]>([]);
+  const [landUploading, setLandUploading] = useState(false);
+  const [landUploadMsg, setLandUploadMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+
+  const loadLand = useCallback(async () => {
+    try {
+      const res = await fetch("/api/land-acquisitions/list", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      setLandTxns(data.transactions || []);
+    } catch (e) {
+      console.error("[land/list]", e);
+    }
+  }, []);
+
+  const handleLandUpload = useCallback(async (file: File) => {
+    setLandUploading(true);
+    setLandUploadMsg(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/land-acquisitions/upload", { method: "POST", body: fd });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      const cleared = body.sheet?.cleared ?? 0;
+      const appended = body.sheet?.appended ?? 0;
+      setLandUploadMsg(
+        `Loaded ${appended} row${appended === 1 ? "" : "s"}${
+          cleared > 0 ? ` — replaced ${cleared} prior row${cleared === 1 ? "" : "s"}` : ""
+        }.`,
+      );
+      await loadLand();
+    } catch (e) {
+      setLandUploadMsg(`Error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setLandUploading(false);
+    }
+  }, [loadLand]);
 
   const load = useCallback(async () => {
     try {
@@ -839,6 +835,7 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => { load(); const iv = setInterval(load, 5 * 60 * 1000); return () => clearInterval(iv); }, [load]);
+  useEffect(() => { loadLand(); }, [loadLand]);
 
   // ── Derived data ──
   const actuals = months.filter(m => m.actual);
@@ -1379,11 +1376,37 @@ export default function Dashboard() {
         <>
           <Section>Next 2 Months — Projected Cash Needs</Section>
 
+          {/* Land Acquisitions Upload */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", marginBottom: 24 }}>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 12, cursor: landUploading ? "wait" : "pointer", background: landUploading ? C.border : C.orange, color: C.bg, padding: "10px 22px", borderRadius: 8, fontWeight: 600, fontSize: 16 }}>
+              {landUploading ? "Extracting…" : "Upload Land Acquisitions screenshot"}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                disabled={landUploading}
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleLandUpload(f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <span style={{ color: C.muted, fontSize: 15 }}>
+              {landTxns.length > 0
+                ? `${landTxns.length} row${landTxns.length === 1 ? "" : "s"} loaded from Sheet`
+                : "No data — upload a screenshot of the Cash Requirements table"}
+            </span>
+            {landUploadMsg && (
+              <span style={{ color: landUploadMsg.startsWith("Error") ? C.red : C.green, fontSize: 15 }}>{landUploadMsg}</span>
+            )}
+          </div>
+
           {/* Cash Needs Cards */}
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
             {next2.map((m, idx) => {
-              const landTxns = getLandForMonth(m.month);
-              const landTotal = landTxns.reduce((s, t) => s + t.amount, 0);
+              const monthLand = getLandForMonth(m.month, landTxns);
+              const landTotal = monthLand.reduce((s, t) => s + t.amount, 0);
               const totalCashNeed = m.total + landTotal;
               return (
                 <div key={idx} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "24px 28px", flex: "1 1 380px", minWidth: 380 }}>
@@ -1426,7 +1449,7 @@ export default function Dashboard() {
                 <BarChart
                   data={next2.map(m => ({
                     ...m,
-                    land: getLandForMonth(m.month).reduce((s, t) => s + t.amount, 0),
+                    land: getLandForMonth(m.month, landTxns).reduce((s, t) => s + t.amount, 0),
                   }))}
                   margin={{ top: 10, right: 30, left: 10, bottom: 0 }}
                 >
@@ -1461,12 +1484,12 @@ export default function Dashboard() {
           )}
 
           {/* Land Acquisitions deal-level detail for the same 2 months */}
-          {next2.some(m => getLandForMonth(m.month).length > 0) && (
+          {next2.some(m => getLandForMonth(m.month, landTxns).length > 0) && (
             <>
               <Section>Land Acquisitions — Detail</Section>
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
                 {next2.map((m, idx) => {
-                  const txns = getLandForMonth(m.month);
+                  const txns = getLandForMonth(m.month, landTxns);
                   if (txns.length === 0) return null;
                   const monthTotal = txns.reduce((s, t) => s + t.amount, 0);
                   return (
