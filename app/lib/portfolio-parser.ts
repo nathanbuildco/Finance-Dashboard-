@@ -3,8 +3,9 @@ import Anthropic, { toFile } from "@anthropic-ai/sdk";
 export const INCLUDED_ACCOUNTS: Record<string, string> = {
   D47912001: "Alternative Assets",
   "41031274": "Margin equity",
+  T48879008: "Treasury Ladder",
 };
-export const EXCLUDED_ACCOUNTS = new Set(["T48879008"]);
+export const EXCLUDED_ACCOUNTS = new Set<string>();
 
 export interface Holding {
   account: string;
@@ -39,7 +40,7 @@ const HOLDINGS_SCHEMA = {
           account: {
             type: "string",
             enum: Object.keys(INCLUDED_ACCOUNTS),
-            description: "Account number — must be D47912001 or 41031274.",
+            description: "Account number — must be D47912001, 41031274, or T48879008.",
           },
           accountName: {
             type: "string",
@@ -75,19 +76,30 @@ const HOLDINGS_SCHEMA = {
   required: ["statementDate", "holdings"],
 };
 
-const SYSTEM_PROMPT = `You extract equity & fund holdings from J.P. Morgan consolidated investment statement PDFs.
+const SYSTEM_PROMPT = `You extract holdings from J.P. Morgan consolidated investment statement PDFs.
 
-INCLUDE only holdings from these accounts:
-- D47912001 (Alternative Assets)
-- 41031274 (Margin equity)
+EXTRACT holdings from these three accounts:
+
+1. D47912001 (Alternative Assets) — list each holding individually.
+2. 41031274 (Margin equity) — list each holding individually.
+3. T48879008 (Treasury Ladder) — DO NOT list individual T-bill positions.
+   Return EXACTLY ONE aggregate row with the account's ending market value
+   (printed on page 1 of the statement under the account-level summary):
+     - account: "T48879008"
+     - accountName: "Treasury Ladder"
+     - ticker: "TREASURY"
+     - description: "Treasury Ladder"
+     - shares: 0
+     - costBasis: same as marketValue
+     - marketValue: the T48879008 account ending market value in USD
 
 EXCLUDE entirely:
-- Account T48879008 (Treasury ladder) and every position inside it
 - Any consolidated / "all accounts" / "total portfolio" rollup rows
 - Cash, money market sweeps, accrued interest, dividends receivable
 - Any duplicate rollup that already appears as line items
+- Individual T-bill positions inside T48879008 (use the one aggregate row instead)
 
-For every included holding return:
+For every line-item holding from D47912001 or 41031274 return:
 - account: "D47912001" or "41031274"
 - accountName: "Alternative Assets" or "Margin equity" — match the account
 - ticker: the security symbol exactly as printed
@@ -141,7 +153,7 @@ export async function parsePortfolioPdf(
             },
             {
               type: "text",
-              text: "Extract all holdings from accounts D47912001 and 41031274 only. Do not include T48879008 or any consolidated rollup.",
+              text: "Extract all individual holdings from accounts D47912001 and 41031274, plus a single aggregate row for the T48879008 account ending market value. Do not include any consolidated 'all accounts' rollup.",
             },
           ],
         },

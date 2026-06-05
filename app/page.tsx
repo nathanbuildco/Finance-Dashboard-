@@ -16,6 +16,8 @@ const SHEET_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTlUqIymbq_OgJ70EoO2uARD86PqF5vKmG_CzYTyzSzxdEXGTtk3mgRf7NhecnaXjhdTpyor_e3-NJ5/pub?gid=634011599&single=true&output=csv";
 const PLAN_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTlUqIymbq_OgJ70EoO2uARD86PqF5vKmG_CzYTyzSzxdEXGTtk3mgRf7NhecnaXjhdTpyor_e3-NJ5/pub?gid=1750179845&single=true&output=csv";
+const OPERATING_CASH_CSV_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTlUqIymbq_OgJ70EoO2uARD86PqF5vKmG_CzYTyzSzxdEXGTtk3mgRf7NhecnaXjhdTpyor_e3-NJ5/pub?gid=1657849898&single=true&output=csv";
 
 // ── Land Acquisitions ─────────────────────────────────────────────────────
 // Data lives in the "Land Acquisitions" tab of the linked Google Sheet.
@@ -165,6 +167,29 @@ function toNum(val: string | undefined): number {
   const cleaned = val.replace(/[$,\s"]/g, "").replace(/[()]/g, "");
   const n = parseFloat(cleaned);
   return isNaN(n) ? 0 : n;
+}
+
+// Parses dollar amounts that may carry magnitude suffixes (mm, m, b, k) — e.g. "$1.88mm" → 1880000.
+function toNumWithSuffix(val: string | undefined): number {
+  if (!val) return 0;
+  const s = String(val).trim();
+  if (!s) return 0;
+  const isNeg = /^\(.*\)$/.test(s) || s.startsWith("-");
+  const stripped = s.replace(/^\(|\)$/g, "").replace(/^-/, "").replace(/[$,\s"]/g, "");
+  const suffixMatch = stripped.match(/(mm|bn|m|b|k)$/i);
+  let numStr = stripped;
+  let multiplier = 1;
+  if (suffixMatch) {
+    numStr = stripped.slice(0, -suffixMatch[0].length);
+    const sfx = suffixMatch[1].toLowerCase();
+    multiplier =
+      sfx === "mm" || sfx === "m" ? 1_000_000 :
+      sfx === "bn" || sfx === "b" ? 1_000_000_000 :
+      sfx === "k" ? 1_000 : 1;
+  }
+  const n = parseFloat(numStr);
+  if (isNaN(n)) return 0;
+  return (isNeg ? -1 : 1) * n * multiplier;
 }
 
 function findRow(rows: string[][], label: string): string[] | null {
@@ -571,6 +596,221 @@ const WaterfallTooltip = ({ active, payload }: any) => {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 // ══════════════════════════════════════════════
+// PROJECTED SPEND TAB
+// ══════════════════════════════════════════════
+const SPEND_NAVY = "#1e3a8a";
+const SPEND_MSTR_GRAY = "#9ca3af";
+
+interface SpendBarRow {
+  name: string;
+  opTreas: number;
+  ibit: number;
+  mstr: number;
+  spend: number;
+  total: number;
+  // Per-bar breakdown stash for the tooltip (operating cash and treasury split out).
+  operating: number;
+  treasury: number;
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const SpendTooltip = ({ active, payload }: any) => {
+  if (!active || !payload?.length) return null;
+  const row: SpendBarRow = payload[0].payload;
+  const lines: { label: string; val: number; color: string }[] = [];
+  if (row.operating) lines.push({ label: "Operating Cash", val: row.operating, color: SPEND_NAVY });
+  if (row.treasury) lines.push({ label: "Treasury Ladder", val: row.treasury, color: SPEND_NAVY });
+  if (row.ibit) lines.push({ label: "IBIT", val: row.ibit, color: C.orange });
+  if (row.mstr) lines.push({ label: "MSTR", val: row.mstr, color: SPEND_MSTR_GRAY });
+  if (row.spend) lines.push({ label: row.name, val: row.spend, color: C.red });
+  return (
+    <div style={{ background: "#1a1f2e", border: "1px solid #2a3040", borderRadius: 10, padding: "14px 18px", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
+      <div style={{ color: C.text, fontWeight: 700, fontSize: 17, marginBottom: 8 }}>{row.name}</div>
+      {lines.map((l, i) => (
+        <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 18, fontSize: 15, color: l.color, fontFamily: "monospace" }}>
+          <span>{l.label}</span>
+          <span>{l.val < 0 ? `(${fmtFull(Math.abs(l.val))})` : fmtFull(l.val)}</span>
+        </div>
+      ))}
+      <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 8, paddingTop: 6, display: "flex", justifyContent: "space-between", gap: 18, fontSize: 16, color: C.text, fontWeight: 700, fontFamily: "monospace" }}>
+        <span>Total</span>
+        <span>{row.total < 0 ? `(${fmtFull(Math.abs(row.total))})` : fmtFull(row.total)}</span>
+      </div>
+    </div>
+  );
+};
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+function ProjectedSpendTab({ months }: { months: MonthData[] }) {
+  const [operatingCash, setOperatingCash] = useState(0);
+  const [ibitValue, setIbitValue] = useState(0);
+  const [mstrValue, setMstrValue] = useState(0);
+  const [treasuryValue, setTreasuryValue] = useState(0);
+  const [latestPortfolioDate, setLatestPortfolioDate] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const [opRes, snapRes] = await Promise.all([
+          fetch(OPERATING_CASH_CSV_URL),
+          fetch("/api/portfolio/snapshots", { cache: "no-store" }),
+        ]);
+
+        if (opRes.ok) {
+          const csv = await opRes.text();
+          const opRows = parseCSV(csv);
+          // Cell F11 = column F (index 5), row 11 (index 10). Accepts magnitude suffixes
+          // (e.g. "$1.88mm" → 1,880,000) for hand-typed values.
+          const rawF11 = opRows[10]?.[5] ?? "";
+          setOperatingCash(toNumWithSuffix(rawF11));
+        }
+
+        if (snapRes.ok) {
+          const data = await snapRes.json();
+          const snaps: PortfolioSnapshot[] = data.snapshots || [];
+          const dates = Array.from(new Set(snaps.map((s) => s.statementDate))).sort();
+          const latest = dates[dates.length - 1] || "";
+          setLatestPortfolioDate(latest);
+          const latestSnaps = snaps.filter((s) => s.statementDate === latest);
+          const sumTicker = (t: string) =>
+            latestSnaps.filter((s) => s.ticker.toUpperCase() === t).reduce((sum, s) => sum + s.marketValue, 0);
+          setIbitValue(sumTicker("IBIT"));
+          setMstrValue(sumTicker("MSTR"));
+          setTreasuryValue(sumTicker("TREASURY"));
+        }
+        setErr(null);
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const ntm = useMemo(() => months.filter((m) => !m.actual).slice(0, 12), [months]);
+  const overhead = ntm.reduce((s, m) => s + m.overhead, 0);
+  const corpDev = ntm.reduce((s, m) => s + m.corpDev, 0);
+  const projDev = ntm.reduce((s, m) => s + m.projDev, 0);
+  const totalSpend = overhead + corpDev + projDev;
+
+  const bopOpTreas = operatingCash + treasuryValue;
+  const eopOpTreas = bopOpTreas - totalSpend;
+  const bopTotal = bopOpTreas + ibitValue + mstrValue;
+  const eopTotal = eopOpTreas + ibitValue + mstrValue;
+
+  const chartData: SpendBarRow[] = [
+    { name: "BOP Total Cash", operating: operatingCash, treasury: treasuryValue, opTreas: bopOpTreas, ibit: ibitValue, mstr: mstrValue, spend: 0, total: bopTotal },
+    { name: "Corporate Overhead", operating: 0, treasury: 0, opTreas: 0, ibit: 0, mstr: 0, spend: -overhead, total: -overhead },
+    { name: "Corporate Development", operating: 0, treasury: 0, opTreas: 0, ibit: 0, mstr: 0, spend: -corpDev, total: -corpDev },
+    { name: "Project Development", operating: 0, treasury: 0, opTreas: 0, ibit: 0, mstr: 0, spend: -projDev, total: -projDev },
+    { name: "EOP Total Cash", operating: eopOpTreas - treasuryValue, treasury: treasuryValue, opTreas: eopOpTreas, ibit: ibitValue, mstr: mstrValue, spend: 0, total: eopTotal },
+  ];
+
+  const ntmRange = ntm.length === 12 ? `${ntm[0].month} – ${ntm[11].month}` : "";
+
+  return (
+    <>
+      <Section>Projected Spend — Next 12 Months</Section>
+
+      {loading && <div style={{ color: C.muted, marginTop: 24 }}>Loading…</div>}
+      {err && <div style={{ color: C.red, marginTop: 24 }}>{err}</div>}
+
+      {!loading && (
+        <>
+          <div style={{ display: "flex", gap: 14, marginBottom: 18, flexWrap: "wrap" }}>
+            <KPI label="BOP Total" value={fmtFull(bopTotal)} sub={ntmRange ? `Start: ${ntm[0]?.month ?? ""}` : undefined} />
+            <KPI label="NTM Spend" value={fmtFull(totalSpend)} color={C.red} />
+            <KPI label="EOP Total" value={fmtFull(eopTotal)} color={eopTotal < bopTotal ? C.orange : C.green} sub={ntmRange ? `End: ${ntm[11]?.month ?? ""}` : undefined} />
+          </div>
+
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(60vh, 720px)", minHeight: 460 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 24, right: 30, left: 10, bottom: 20 }}>
+                <XAxis dataKey="name" tick={{ fill: C.text, fontSize: 16 }} axisLine={{ stroke: "#1e2430" }} interval={0} />
+                <YAxis tick={{ fill: C.muted, fontSize: 15, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
+                <Tooltip content={<SpendTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+                <Legend
+                  wrapperStyle={{ fontSize: 18 }}
+                  content={() => (
+                    <ul style={{ display: "flex", justifyContent: "center", gap: 28, listStyle: "none", padding: 0, margin: "12px 0 0", flexWrap: "wrap" }}>
+                      {[
+                        { label: "Operating + Treasury", color: SPEND_NAVY },
+                        { label: "IBIT", color: C.orange },
+                        { label: "MSTR", color: SPEND_MSTR_GRAY },
+                        { label: "Spending", color: C.red },
+                      ].map((k, i) => (
+                        <li key={i} style={{ display: "flex", alignItems: "center", gap: 10, color: k.color, fontSize: 16 }}>
+                          <span style={{ display: "inline-block", width: 14, height: 14, background: k.color, borderRadius: 3 }} />
+                          {k.label}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                />
+                <Bar dataKey="opTreas" stackId="a" fill={SPEND_NAVY} radius={[0, 0, 0, 0]}>
+                  <LabelList dataKey="total" position="top" formatter={(v) => { const n = Number(v); return n ? fmt(n) : ""; }} fill={C.text} fontSize={16} fontWeight={700} />
+                </Bar>
+                <Bar dataKey="ibit" stackId="a" fill={C.orange} />
+                <Bar dataKey="mstr" stackId="a" fill={SPEND_MSTR_GRAY} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="spend" stackId="a" fill={C.red} radius={[0, 0, 4, 4]}>
+                  <LabelList dataKey="total" position="bottom" formatter={(v) => { const n = Number(v); return n ? fmt(n) : ""; }} fill={C.red} fontSize={16} fontWeight={700} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Breakdown table */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", marginTop: 20 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 16 }}>
+              <tbody>
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <td style={{ padding: "10px 8px", color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 13 }}>BOP Total Cash</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.text, fontFamily: "monospace", fontWeight: 700 }}>{fmtFull(bopTotal)}</td>
+                  <td style={{ padding: "10px 8px", color: C.muted, fontSize: 14, textAlign: "right", whiteSpace: "nowrap" }}>
+                    Operating {fmtFull(operatingCash)} · Treasury {fmtFull(treasuryValue)} · IBIT {fmtFull(ibitValue)} · MSTR {fmtFull(mstrValue)}
+                  </td>
+                </tr>
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <td style={{ padding: "10px 8px", color: C.red }}>Corporate Overhead</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.red, fontFamily: "monospace", fontWeight: 600 }}>({fmtFull(overhead)})</td>
+                  <td />
+                </tr>
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <td style={{ padding: "10px 8px", color: C.red }}>Corporate Development</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.red, fontFamily: "monospace", fontWeight: 600 }}>({fmtFull(corpDev)})</td>
+                  <td />
+                </tr>
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <td style={{ padding: "10px 8px", color: C.red }}>Project Development</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.red, fontFamily: "monospace", fontWeight: 600 }}>({fmtFull(projDev)})</td>
+                  <td />
+                </tr>
+                <tr>
+                  <td style={{ padding: "10px 8px", color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 13 }}>EOP Total Cash</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.text, fontFamily: "monospace", fontWeight: 700 }}>{fmtFull(eopTotal)}</td>
+                  <td style={{ padding: "10px 8px", color: C.muted, fontSize: 14, textAlign: "right", whiteSpace: "nowrap" }}>
+                    Operating + Treasury {fmtFull(eopOpTreas)} · IBIT {fmtFull(ibitValue)} · MSTR {fmtFull(mstrValue)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ marginTop: 16, fontSize: 14, color: C.muted, fontStyle: "italic" }}>
+            Assumes 0% IBIT and MSTR value appreciation.
+            {latestPortfolioDate && ` Investment values from portfolio snapshot dated ${latestPortfolioDate}.`}
+            {treasuryValue === 0 && " Treasury value will appear here after the next portfolio statement upload."}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+// ══════════════════════════════════════════════
 // ACQUISITIONS CLOSED TAB
 // ══════════════════════════════════════════════
 interface ClosedAcquisitionRow {
@@ -590,6 +830,18 @@ interface ClosedDeal {
   lineItems: { lineItem: string; amount: number }[];
   allIn: number;
   perAcre: number;
+}
+
+function parseClosingDate(s: string): number {
+  if (!s) return Number.POSITIVE_INFINITY;
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+  if (iso) return Date.UTC(+iso[1], +iso[2] - 1, +iso[3]);
+  const us = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/.exec(s);
+  if (us) {
+    const y = +us[3];
+    return Date.UTC(y < 100 ? 2000 + y : y, +us[1] - 1, +us[2]);
+  }
+  return Number.POSITIVE_INFINITY;
 }
 
 function groupClosedDeals(rows: ClosedAcquisitionRow[]): ClosedDeal[] {
@@ -646,7 +898,13 @@ function AcquisitionsClosedTab() {
     })();
   }, []);
 
-  const deals = useMemo(() => groupClosedDeals(rows), [rows]);
+  const deals = useMemo(
+    () =>
+      groupClosedDeals(rows).sort(
+        (a, b) => parseClosingDate(a.closingDate) - parseClosingDate(b.closingDate),
+      ),
+    [rows],
+  );
 
   return (
     <>
@@ -1196,6 +1454,7 @@ export default function Dashboard() {
     { id: "fixed", label: "Fixed Expenses" },
     { id: "portfolio", label: "Investment Portfolio" },
     { id: "closed", label: "Acquisitions Closed" },
+    { id: "projspend", label: "Projected Spend" },
   ];
 
   return (
@@ -1852,6 +2111,8 @@ export default function Dashboard() {
       {tab === "portfolio" && <PortfolioTab />}
 
       {tab === "closed" && <AcquisitionsClosedTab />}
+
+      {tab === "projspend" && <ProjectedSpendTab months={months} />}
 
       {/* FOOTER */}
       <div style={{ marginTop: 40, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, fontSize: 14, color: C.muted, flexWrap: "wrap" }}>
