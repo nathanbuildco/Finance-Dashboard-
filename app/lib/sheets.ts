@@ -25,6 +25,17 @@ export const LAND_HEADERS = [
   "Uploaded At",
 ] as const;
 
+export const CLOSED_TAB = "Acquisitions Closed";
+
+export interface ClosedAcquisitionRow {
+  dealName: string;
+  acreage: number;
+  closingDate: string;
+  lineItem: string;
+  amount: number;
+  notes: string;
+}
+
 export interface SnapshotRow {
   statementDate: string;
   account: string;
@@ -341,4 +352,65 @@ export async function listLandAcquisitions(): Promise<LandRow[]> {
       amount: Number(r[3] ?? 0),
       uploadedAt: String(r[4] ?? ""),
     }));
+}
+
+const CLOSED_HEADER_KEYS: Record<keyof ClosedAcquisitionRow, string[]> = {
+  dealName: ["deal_name", "deal name", "deal"],
+  acreage: ["acreage", "acres"],
+  closingDate: ["closing_date", "closing date", "close_date", "close date"],
+  lineItem: ["line_item", "line item"],
+  amount: ["amount", "$", "value"],
+  notes: ["notes", "note", "comments"],
+};
+
+function parseAmount(raw: unknown): number {
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : 0;
+  const s = String(raw ?? "").trim();
+  if (!s) return 0;
+  // Sheets sometimes serializes negatives as parens, $/commas vary.
+  const negative = /^\(.*\)$/.test(s);
+  const cleaned = s.replace(/[$,()\s]/g, "");
+  const n = Number(cleaned);
+  if (!Number.isFinite(n)) return 0;
+  return negative ? -Math.abs(n) : n;
+}
+
+export async function listClosedAcquisitions(): Promise<ClosedAcquisitionRow[]> {
+  const { sheets, spreadsheetId } = getSheetsClient();
+  const tab = await getTabSheetId(sheets, spreadsheetId, CLOSED_TAB);
+  if (tab === null) return [];
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${CLOSED_TAB}!A1:Z`,
+  });
+  const values = res.data.values ?? [];
+  if (values.length < 2) return [];
+
+  const headerRow = values[0].map((h) => String(h ?? "").trim().toLowerCase());
+  const colIndex: Partial<Record<keyof ClosedAcquisitionRow, number>> = {};
+  for (const key of Object.keys(CLOSED_HEADER_KEYS) as (keyof ClosedAcquisitionRow)[]) {
+    const aliases = CLOSED_HEADER_KEYS[key];
+    const idx = headerRow.findIndex((h) => aliases.includes(h));
+    if (idx >= 0) colIndex[key] = idx;
+  }
+  if (colIndex.dealName === undefined || colIndex.amount === undefined) {
+    return [];
+  }
+
+  const out: ClosedAcquisitionRow[] = [];
+  for (let i = 1; i < values.length; i++) {
+    const r = values[i] ?? [];
+    const dealName = String(r[colIndex.dealName] ?? "").trim();
+    if (!dealName) continue;
+    out.push({
+      dealName,
+      acreage: parseAmount(r[colIndex.acreage ?? -1]),
+      closingDate: String(r[colIndex.closingDate ?? -1] ?? "").trim(),
+      lineItem: String(r[colIndex.lineItem ?? -1] ?? "").trim(),
+      amount: parseAmount(r[colIndex.amount]),
+      notes: String(r[colIndex.notes ?? -1] ?? "").trim(),
+    });
+  }
+  return out;
 }

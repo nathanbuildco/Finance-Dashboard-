@@ -455,6 +455,7 @@ const C = {
   text: "#e8eaed", muted: "#7a8194",
   blue: "#4fc3f7", purple: "#ab47bc", green: "#66bb6a",
   red: "#ef5350", orange: "#ffa726", yellow: "#ffee58",
+  gold: "#d4a574",
 };
 
 // ══════════════════════════════════════════════
@@ -568,6 +569,170 @@ const WaterfallTooltip = ({ active, payload }: any) => {
   );
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
+
+// ══════════════════════════════════════════════
+// ACQUISITIONS CLOSED TAB
+// ══════════════════════════════════════════════
+interface ClosedAcquisitionRow {
+  dealName: string;
+  acreage: number;
+  closingDate: string;
+  lineItem: string;
+  amount: number;
+  notes: string;
+}
+
+interface ClosedDeal {
+  dealName: string;
+  acreage: number;
+  closingDate: string;
+  notes: string;
+  lineItems: { lineItem: string; amount: number }[];
+  allIn: number;
+  perAcre: number;
+}
+
+function groupClosedDeals(rows: ClosedAcquisitionRow[]): ClosedDeal[] {
+  const groups = new Map<string, ClosedDeal>();
+  for (const r of rows) {
+    let g = groups.get(r.dealName);
+    if (!g) {
+      g = { dealName: r.dealName, acreage: 0, closingDate: "", notes: "", lineItems: [], allIn: 0, perAcre: 0 };
+      groups.set(r.dealName, g);
+    }
+    if (!g.acreage && r.acreage) g.acreage = r.acreage;
+    if (!g.closingDate && r.closingDate) g.closingDate = r.closingDate;
+    if (!g.notes && r.notes) g.notes = r.notes;
+    g.lineItems.push({ lineItem: r.lineItem || "—", amount: r.amount });
+    g.allIn += r.amount;
+  }
+  for (const g of groups.values()) {
+    g.perAcre = g.acreage > 0 ? g.allIn / g.acreage : 0;
+  }
+  return Array.from(groups.values());
+}
+
+function fmtSignedParens(v: number): string {
+  const abs = Math.abs(Math.round(v));
+  const formatted = `$${abs.toLocaleString()}`;
+  return v < 0 ? `(${formatted})` : formatted;
+}
+
+const CLOSED_CARD_BG = "#10192a";
+const CLOSED_CARD_BORDER = "#1d2b44";
+
+function AcquisitionsClosedTab() {
+  const [rows, setRows] = useState<ClosedAcquisitionRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const res = await fetch("/api/closed-acquisitions/list", { cache: "no-store" });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        setRows(data.rows || []);
+        setErr(null);
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const deals = useMemo(() => groupClosedDeals(rows), [rows]);
+
+  return (
+    <>
+      <Section>Acquisitions Closed</Section>
+
+      {loading && <div style={{ color: C.muted, marginTop: 24 }}>Loading…</div>}
+      {err && <div style={{ color: C.red, marginTop: 24 }}>{err}</div>}
+
+      {!loading && !err && deals.length === 0 && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "32px 28px", marginTop: 24, color: C.muted, fontSize: 16 }}>
+          No closed acquisitions yet. Add rows to the &quot;Closed Acquisitions&quot; tab in the linked Google Sheet to populate this view.
+        </div>
+      )}
+
+      {deals.length > 0 && (() => {
+        const totalAcres = deals.reduce((s, d) => s + d.acreage, 0);
+        const totalAllIn = deals.reduce((s, d) => s + d.allIn, 0);
+        const blendedPerAcre = totalAcres > 0 ? totalAllIn / totalAcres : 0;
+        return (
+          <>
+            <div style={{ display: "flex", gap: 14, marginBottom: 24, flexWrap: "wrap" }}>
+              <KPI
+                label="Total Acres"
+                value={totalAcres.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                sub={`${deals.length} deal${deals.length === 1 ? "" : "s"}`}
+              />
+              <KPI label="Total All-In" value={fmtFull(totalAllIn)} />
+              <KPI label="All-In / Acre" value={fmtFull(blendedPerAcre)} color={C.blue} />
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(420px, 1fr))", gap: 20 }}>
+              {deals.map((deal, i) => (
+            <div key={i} style={{ background: CLOSED_CARD_BG, border: `1px solid ${CLOSED_CARD_BORDER}`, borderRadius: 14, padding: "26px 28px", display: "flex", flexDirection: "column", gap: 18 }}>
+              {/* Header */}
+              <div>
+                <div style={{ fontSize: 30, fontWeight: 700, color: C.text, lineHeight: 1.15 }}>{deal.dealName}</div>
+                <div style={{ marginTop: 6, fontSize: 15, color: C.muted, display: "flex", gap: 14, flexWrap: "wrap" }}>
+                  {deal.acreage > 0 && <span>{deal.acreage.toLocaleString(undefined, { maximumFractionDigits: 2 })} acres</span>}
+                  {deal.closingDate && <span>Closed {deal.closingDate}</span>}
+                </div>
+              </div>
+
+              {/* Headline + per-acre */}
+              <div>
+                <div style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: "0.08em", color: C.muted, fontWeight: 600 }}>All-In Cost</div>
+                <div style={{ fontSize: 44, fontWeight: 700, fontFamily: "monospace", color: C.text, marginTop: 4, lineHeight: 1.1 }}>{fmtFull(deal.allIn)}</div>
+                {deal.acreage > 0 && (
+                  <div style={{ fontSize: 17, color: C.blue, fontFamily: "monospace", marginTop: 4 }}>
+                    {fmtFull(deal.perAcre)} / acre
+                  </div>
+                )}
+              </div>
+
+              {/* Divider */}
+              <div style={{ height: 1, background: CLOSED_CARD_BORDER }} />
+
+              {/* Line items */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {deal.lineItems.map((li, j) => {
+                  const negative = li.amount < 0;
+                  return (
+                    <div key={j} style={{ display: "flex", justifyContent: "space-between", gap: 16, fontSize: 16 }}>
+                      <span style={{ color: negative ? C.gold : C.text }}>{li.lineItem}</span>
+                      <span style={{ color: negative ? C.gold : C.text, fontFamily: "monospace", fontWeight: 600, whiteSpace: "nowrap" }}>
+                        {fmtSignedParens(li.amount)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Notes */}
+              {deal.notes && (
+                <div style={{ marginTop: 4, paddingTop: 14, borderTop: `1px solid ${CLOSED_CARD_BORDER}`, fontSize: 14, color: C.muted, fontStyle: "italic", lineHeight: 1.5 }}>
+                  {deal.notes}
+                </div>
+              )}
+            </div>
+          ))}
+            </div>
+          </>
+        );
+      })()}
+    </>
+  );
+}
 
 function PortfolioTab() {
   const [snapshots, setSnapshots] = useState<PortfolioSnapshot[]>([]);
@@ -1030,6 +1195,7 @@ export default function Dashboard() {
     { id: "projvsplan", label: "Proj vs Plan" },
     { id: "fixed", label: "Fixed Expenses" },
     { id: "portfolio", label: "Investment Portfolio" },
+    { id: "closed", label: "Acquisitions Closed" },
   ];
 
   return (
@@ -1684,6 +1850,8 @@ export default function Dashboard() {
       })()}
 
       {tab === "portfolio" && <PortfolioTab />}
+
+      {tab === "closed" && <AcquisitionsClosedTab />}
 
       {/* FOOTER */}
       <div style={{ marginTop: 40, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, fontSize: 14, color: C.muted, flexWrap: "wrap" }}>
