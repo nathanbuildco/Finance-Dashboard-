@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   BarChart, Bar, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Line, LabelList
+  ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Line, LabelList, Customized
 } from "recharts";
 import { logout } from "./actions/auth";
 import ChatWidget from "./chat-widget";
@@ -603,10 +603,14 @@ const SPEND_MSTR_GRAY = "#9ca3af";
 
 interface SpendBarRow {
   name: string;
+  // Invisible floor that floats the spend bars to their running cumulative position.
+  base: number;
   opTreas: number;
   ibit: number;
   mstr: number;
+  // Drop magnitude (positive); rendered as a floating red bar from `base` to `base + spend`.
   spend: number;
+  // Display total: bopTotal/eopTotal on the stacked endpoints, negative drop on spend rows.
   total: number;
   // Per-bar breakdown stash for the tooltip (operating cash and treasury split out).
   operating: number;
@@ -622,7 +626,7 @@ const SpendTooltip = ({ active, payload }: any) => {
   if (row.treasury) lines.push({ label: "Treasury Ladder", val: row.treasury, color: SPEND_NAVY });
   if (row.ibit) lines.push({ label: "IBIT", val: row.ibit, color: C.orange });
   if (row.mstr) lines.push({ label: "MSTR", val: row.mstr, color: SPEND_MSTR_GRAY });
-  if (row.spend) lines.push({ label: row.name, val: row.spend, color: C.red });
+  if (row.spend) lines.push({ label: row.name, val: -row.spend, color: C.red });
   return (
     <div style={{ background: "#1a1f2e", border: "1px solid #2a3040", borderRadius: 10, padding: "14px 18px", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
       <div style={{ color: C.text, fontWeight: 700, fontSize: 17, marginBottom: 8 }}>{row.name}</div>
@@ -701,13 +705,22 @@ function ProjectedSpendTab({ months }: { months: MonthData[] }) {
   const bopTotal = bopOpTreas + ibitValue + mstrValue;
   const eopTotal = eopOpTreas + ibitValue + mstrValue;
 
+  // Running cumulative at each waterfall step — used both for the floating spend bars (their `base`)
+  // and for the dashed connector heights between adjacent bars.
+  const cumAfterOH = bopTotal - overhead;
+  const cumAfterCD = cumAfterOH - corpDev;
+  const cumAfterPD = cumAfterCD - projDev; // == eopTotal
+
   const chartData: SpendBarRow[] = [
-    { name: "BOP Total Cash", operating: operatingCash, treasury: treasuryValue, opTreas: bopOpTreas, ibit: ibitValue, mstr: mstrValue, spend: 0, total: bopTotal },
-    { name: "Corporate Overhead", operating: 0, treasury: 0, opTreas: 0, ibit: 0, mstr: 0, spend: -overhead, total: -overhead },
-    { name: "Corporate Development", operating: 0, treasury: 0, opTreas: 0, ibit: 0, mstr: 0, spend: -corpDev, total: -corpDev },
-    { name: "Project Development", operating: 0, treasury: 0, opTreas: 0, ibit: 0, mstr: 0, spend: -projDev, total: -projDev },
-    { name: "EOP Total Cash", operating: eopOpTreas - treasuryValue, treasury: treasuryValue, opTreas: eopOpTreas, ibit: ibitValue, mstr: mstrValue, spend: 0, total: eopTotal },
+    { name: "BOP Total Cash", base: 0, operating: operatingCash, treasury: treasuryValue, opTreas: bopOpTreas, ibit: ibitValue, mstr: mstrValue, spend: 0, total: bopTotal },
+    { name: "Corporate Overhead", base: cumAfterOH, operating: 0, treasury: 0, opTreas: 0, ibit: 0, mstr: 0, spend: overhead, total: -overhead },
+    { name: "Corporate Development", base: cumAfterCD, operating: 0, treasury: 0, opTreas: 0, ibit: 0, mstr: 0, spend: corpDev, total: -corpDev },
+    { name: "Project Development", base: cumAfterPD, operating: 0, treasury: 0, opTreas: 0, ibit: 0, mstr: 0, spend: projDev, total: -projDev },
+    { name: "EOP Total Cash", base: 0, operating: eopOpTreas - treasuryValue, treasury: treasuryValue, opTreas: eopOpTreas, ibit: ibitValue, mstr: mstrValue, spend: 0, total: eopTotal },
   ];
+
+  // Heights (in chart units) of the dashed connectors between adjacent bars.
+  const connectorJoins = [bopTotal, cumAfterOH, cumAfterCD, cumAfterPD];
 
   const ntmRange = ntm.length === 12 ? `${ntm[0].month} – ${ntm[11].month}` : "";
 
@@ -750,14 +763,45 @@ function ProjectedSpendTab({ months }: { months: MonthData[] }) {
                     </ul>
                   )}
                 />
-                <Bar dataKey="opTreas" stackId="a" fill={SPEND_NAVY} radius={[0, 0, 0, 0]}>
-                  <LabelList dataKey="total" position="top" formatter={(v) => { const n = Number(v); return n ? fmt(n) : ""; }} fill={C.text} fontSize={16} fontWeight={700} />
-                </Bar>
+                {/* Invisible spacer that floats the spend bars to their cumulative position. */}
+                <Bar dataKey="base" stackId="a" fill="transparent" isAnimationActive={false} />
+                <Bar dataKey="opTreas" stackId="a" fill={SPEND_NAVY} />
                 <Bar dataKey="ibit" stackId="a" fill={C.orange} />
-                <Bar dataKey="mstr" stackId="a" fill={SPEND_MSTR_GRAY} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="spend" stackId="a" fill={C.red} radius={[0, 0, 4, 4]}>
-                  <LabelList dataKey="total" position="bottom" formatter={(v) => { const n = Number(v); return n ? fmt(n) : ""; }} fill={C.red} fontSize={16} fontWeight={700} />
+                <Bar dataKey="mstr" stackId="a" fill={SPEND_MSTR_GRAY} radius={[4, 4, 0, 0]}>
+                  <LabelList dataKey="total" position="top" formatter={(v) => { const n = Number(v); return n > 0 ? fmtFull(n) : ""; }} fill={C.text} fontSize={16} fontWeight={700} />
                 </Bar>
+                <Bar dataKey="spend" stackId="a" fill={C.red} radius={[4, 4, 0, 0]}>
+                  <LabelList dataKey="total" position="top" formatter={(v) => { const n = Number(v); return n < 0 ? `(${fmtFull(Math.abs(n))})` : ""; }} fill={C.red} fontSize={16} fontWeight={700} />
+                </Bar>
+                {/* Dashed connectors at each cumulative running total, drawn between adjacent bar tops. */}
+                <Customized component={(p: any) => {
+                  const xAxis = p?.xAxisMap ? (Object.values(p.xAxisMap)[0] as any) : null;
+                  const yAxis = p?.yAxisMap ? (Object.values(p.yAxisMap)[0] as any) : null;
+                  if (!xAxis?.scale || !yAxis?.scale) return null;
+                  const bw = xAxis.scale.bandwidth?.() ?? 0;
+                  return (
+                    <g>
+                      {connectorJoins.map((y, i) => {
+                        const xFromBase = xAxis.scale(chartData[i].name);
+                        const xToBase = xAxis.scale(chartData[i + 1].name);
+                        if (xFromBase === undefined || xToBase === undefined) return null;
+                        const yPx = yAxis.scale(y);
+                        return (
+                          <line
+                            key={i}
+                            x1={xFromBase + bw * 0.85}
+                            y1={yPx}
+                            x2={xToBase + bw * 0.15}
+                            y2={yPx}
+                            stroke={C.muted}
+                            strokeWidth={1.5}
+                            strokeDasharray="6 4"
+                          />
+                        );
+                      })}
+                    </g>
+                  );
+                }} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -1113,7 +1157,6 @@ function PortfolioTab() {
             <KPI label="NAV" value={fmtFull(nav)} sub={activeDate} />
             <KPI label="Cost Basis" value={fmtFull(totalCost)} />
             <KPI label="Unrealized G/L" value={fmtFull(totalPL)} color={totalPL >= 0 ? C.green : C.red} />
-            <KPI label="Positions" value={String(currentRows.length)} />
           </div>
 
           <Section>Cost → Market Value Bridge</Section>
