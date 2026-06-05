@@ -1390,6 +1390,16 @@ export default function Dashboard() {
       .filter(q => q.quarter !== "Q2 '25");
   }, [months, overviewData]);
 
+  // ── Payroll tab view: current quarter + next 3 (4 quarters total) ──
+  const displayedQuarterlyPayroll = useMemo(() => {
+    const now = new Date();
+    const currentQ = Math.floor(now.getMonth() / 3) + 1;
+    const currentYr = now.getFullYear();
+    const currentKey = `Q${currentQ} '${String(currentYr).slice(2)}`;
+    const startIdx = quarterlyPayroll.findIndex(q => q.quarter === currentKey);
+    return startIdx >= 0 ? quarterlyPayroll.slice(startIdx, startIdx + 4) : quarterlyPayroll.slice(-4);
+  }, [quarterlyPayroll]);
+
   // ── Next fully-projected quarter's annualized payroll ──
   const nextQuarterPayroll = useMemo(() => {
     const firstProjected = projected[0];
@@ -2004,7 +2014,7 @@ export default function Dashboard() {
           <Section>Quarterly Annualized Payroll + FTE</Section>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(55vh, 720px)", minHeight: 380 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={quarterlyPayroll} margin={{ top: 72, right: 20, left: 10, bottom: 0 }}>
+              <ComposedChart data={displayedQuarterlyPayroll} margin={{ top: 72, right: 20, left: 10, bottom: 0 }}>
                 <XAxis dataKey="quarter" tick={{ fill: C.text, fontSize: 20 }} axisLine={{ stroke: "#1e2430" }} />
                 <YAxis yAxisId="cost" tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
                 <YAxis yAxisId="fte" orientation="right" tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} axisLine={false} domain={[0, 14]} ticks={[0, 2, 4, 6, 8, 10, 12, 14]} />
@@ -2029,7 +2039,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {quarterlyPayroll.map((q, i) => (
+                {displayedQuarterlyPayroll.map((q, i) => (
                   <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
                     <td style={{ padding: "22px 28px", fontWeight: 700, fontSize: 22 }}>{q.quarter}</td>
                     <td style={{ padding: "22px 28px", textAlign: "right", fontFamily: "monospace", fontSize: 22 }}>{fmtFull(q.annualized)}</td>
