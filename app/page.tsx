@@ -588,7 +588,7 @@ const WaterfallTooltip = ({ active, payload }: any) => {
     <div style={{ background: "#1a1f2e", border: "1px solid #2a3040", borderRadius: 10, padding: "14px 18px", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
       <div style={{ color: C.text, fontWeight: 700, fontSize: 18, marginBottom: 8 }}>{bar.name}</div>
       <div style={{ color: bar.color, fontSize: 16, fontFamily: "monospace" }}>
-        {bar.isPillar ? fmtFull(bar.signed) : `${sign}${fmtFull(Math.abs(bar.signed))}`}
+        {bar.isPillar ? fmt(bar.signed) : `${sign}${fmt(Math.abs(bar.signed))}`}
       </div>
     </div>
   );
@@ -633,12 +633,12 @@ const SpendTooltip = ({ active, payload }: any) => {
       {lines.map((l, i) => (
         <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 18, fontSize: 15, color: l.color, fontFamily: "monospace" }}>
           <span>{l.label}</span>
-          <span>{l.val < 0 ? `(${fmtFull(Math.abs(l.val))})` : fmtFull(l.val)}</span>
+          <span>{l.val < 0 ? `(${fmt(Math.abs(l.val))})` : fmt(l.val)}</span>
         </div>
       ))}
       <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 8, paddingTop: 6, display: "flex", justifyContent: "space-between", gap: 18, fontSize: 16, color: C.text, fontWeight: 700, fontFamily: "monospace" }}>
         <span>Total</span>
-        <span>{row.total < 0 ? `(${fmtFull(Math.abs(row.total))})` : fmtFull(row.total)}</span>
+        <span>{row.total < 0 ? `(${fmt(Math.abs(row.total))})` : fmt(row.total)}</span>
       </div>
     </div>
   );
@@ -734,9 +734,9 @@ function ProjectedSpendTab({ months }: { months: MonthData[] }) {
       {!loading && (
         <>
           <div style={{ display: "flex", gap: 14, marginBottom: 18, flexWrap: "wrap" }}>
-            <KPI label="BOP Total" value={fmtFull(bopTotal)} sub={ntmRange ? `Start: ${ntm[0]?.month ?? ""}` : undefined} />
-            <KPI label="NTM Spend" value={fmtFull(totalSpend)} color={C.red} />
-            <KPI label="EOP Total" value={fmtFull(eopTotal)} color={eopTotal < bopTotal ? C.orange : C.green} sub={ntmRange ? `End: ${ntm[11]?.month ?? ""}` : undefined} />
+            <KPI label="BOP Total" value={fmt(bopTotal)} sub={ntmRange ? `Start: ${ntm[0]?.month ?? ""}` : undefined} />
+            <KPI label="NTM Spend" value={fmt(totalSpend)} color={C.red} />
+            <KPI label="EOP Total" value={fmt(eopTotal)} sub={ntmRange ? `End: ${ntm[11]?.month ?? ""}` : undefined} />
           </div>
 
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(60vh, 720px)", minHeight: 460 }}>
@@ -768,10 +768,10 @@ function ProjectedSpendTab({ months }: { months: MonthData[] }) {
                 <Bar dataKey="opTreas" stackId="a" fill={SPEND_NAVY} />
                 <Bar dataKey="ibit" stackId="a" fill={C.orange} />
                 <Bar dataKey="mstr" stackId="a" fill={SPEND_MSTR_GRAY} radius={[4, 4, 0, 0]}>
-                  <LabelList dataKey="total" position="top" formatter={(v) => { const n = Number(v); return n > 0 ? fmtFull(n) : ""; }} fill={C.text} fontSize={16} fontWeight={700} />
+                  <LabelList dataKey="total" position="top" formatter={(v) => { const n = Number(v); return n > 0 ? fmt(n) : ""; }} fill={C.text} fontSize={16} fontWeight={700} />
                 </Bar>
                 <Bar dataKey="spend" stackId="a" fill={C.red} radius={[4, 4, 0, 0]}>
-                  <LabelList dataKey="total" position="top" formatter={(v) => { const n = Number(v); return n < 0 ? `(${fmtFull(Math.abs(n))})` : ""; }} fill={C.red} fontSize={16} fontWeight={700} />
+                  <LabelList dataKey="total" position="top" formatter={(v) => { const n = Number(v); return n < 0 ? `(${fmt(Math.abs(n))})` : ""; }} fill={C.red} fontSize={16} fontWeight={700} />
                 </Bar>
                 {/* Dashed connectors at each cumulative running total, drawn between adjacent bar tops. */}
                 <Customized component={(p: any) => {
@@ -812,31 +812,31 @@ function ProjectedSpendTab({ months }: { months: MonthData[] }) {
               <tbody>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                   <td style={{ padding: "10px 8px", color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 13 }}>BOP Total Cash</td>
-                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.text, fontFamily: "monospace", fontWeight: 700 }}>{fmtFull(bopTotal)}</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.text, fontFamily: "monospace", fontWeight: 700 }}>{fmt(bopTotal)}</td>
                   <td style={{ padding: "10px 8px", color: C.muted, fontSize: 14, textAlign: "right", whiteSpace: "nowrap" }}>
-                    Operating {fmtFull(operatingCash)} · Treasury {fmtFull(treasuryValue)} · IBIT {fmtFull(ibitValue)} · MSTR {fmtFull(mstrValue)}
+                    Operating {fmt(operatingCash)} · Treasury {fmt(treasuryValue)} · IBIT {fmt(ibitValue)} · MSTR {fmt(mstrValue)}
                   </td>
                 </tr>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                   <td style={{ padding: "10px 8px", color: C.red }}>Corporate Overhead</td>
-                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.red, fontFamily: "monospace", fontWeight: 600 }}>({fmtFull(overhead)})</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.red, fontFamily: "monospace", fontWeight: 600 }}>({fmt(overhead)})</td>
                   <td />
                 </tr>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                   <td style={{ padding: "10px 8px", color: C.red }}>Corporate Development</td>
-                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.red, fontFamily: "monospace", fontWeight: 600 }}>({fmtFull(corpDev)})</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.red, fontFamily: "monospace", fontWeight: 600 }}>({fmt(corpDev)})</td>
                   <td />
                 </tr>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                   <td style={{ padding: "10px 8px", color: C.red }}>Project Development</td>
-                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.red, fontFamily: "monospace", fontWeight: 600 }}>({fmtFull(projDev)})</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.red, fontFamily: "monospace", fontWeight: 600 }}>({fmt(projDev)})</td>
                   <td />
                 </tr>
                 <tr>
                   <td style={{ padding: "10px 8px", color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 13 }}>EOP Total Cash</td>
-                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.text, fontFamily: "monospace", fontWeight: 700 }}>{fmtFull(eopTotal)}</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.text, fontFamily: "monospace", fontWeight: 700 }}>{fmt(eopTotal)}</td>
                   <td style={{ padding: "10px 8px", color: C.muted, fontSize: 14, textAlign: "right", whiteSpace: "nowrap" }}>
-                    Operating + Treasury {fmtFull(eopOpTreas)} · IBIT {fmtFull(ibitValue)} · MSTR {fmtFull(mstrValue)}
+                    Operating + Treasury {fmt(eopOpTreas)} · IBIT {fmt(ibitValue)} · MSTR {fmt(mstrValue)}
                   </td>
                 </tr>
               </tbody>
@@ -1154,9 +1154,9 @@ function PortfolioTab() {
       {currentRows.length > 0 && (
         <>
           <div style={{ display: "flex", gap: 14, marginTop: 18, flexWrap: "wrap" }}>
-            <KPI label="NAV" value={fmtFull(nav)} sub={activeDate} />
-            <KPI label="Cost Basis" value={fmtFull(totalCost)} />
-            <KPI label="Unrealized G/L" value={fmtFull(totalPL)} color={totalPL >= 0 ? C.green : C.red} />
+            <KPI label="NAV" value={fmt(nav)} sub={activeDate} />
+            <KPI label="Cost Basis" value={fmt(totalCost)} />
+            <KPI label="Unrealized G/L" value={fmt(totalPL)} color={totalPL >= 0 ? C.green : C.red} />
           </div>
 
           <Section>Cost → Market Value Bridge</Section>
@@ -1205,10 +1205,10 @@ function PortfolioTab() {
                     <td style={{ padding: "10px 8px", color: C.muted, fontFamily: "inherit" }}>{h.description}</td>
                     <td style={{ padding: "10px 8px", color: C.muted, fontFamily: "inherit" }}>{h.accountName}</td>
                     <td style={{ padding: "10px 8px", textAlign: "right", color: C.text }}>{h.shares.toLocaleString()}</td>
-                    <td style={{ padding: "10px 8px", textAlign: "right", color: C.text }}>{fmtFull(h.costBasis)}</td>
-                    <td style={{ padding: "10px 8px", textAlign: "right", color: C.text }}>{fmtFull(h.marketValue)}</td>
+                    <td style={{ padding: "10px 8px", textAlign: "right", color: C.text }}>{fmt(h.costBasis)}</td>
+                    <td style={{ padding: "10px 8px", textAlign: "right", color: C.text }}>{fmt(h.marketValue)}</td>
                     <td style={{ padding: "10px 8px", textAlign: "right", color: h.unrealized >= 0 ? C.green : C.red }}>
-                      {h.unrealized >= 0 ? "+" : "−"}{fmtFull(Math.abs(h.unrealized))}
+                      {h.unrealized >= 0 ? "+" : "−"}{fmt(Math.abs(h.unrealized))}
                     </td>
                   </tr>
                 ))}
@@ -1957,7 +1957,7 @@ export default function Dashboard() {
               <Section>Land Acquisitions — Detail</Section>
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
                 {next2.map((m, idx) => {
-                  const txns = getLandForMonth(m.month, landTxns);
+                  const txns = getLandForMonth(m.month, landTxns).slice().sort((a, b) => a.date.localeCompare(b.date));
                   if (txns.length === 0) return null;
                   const monthTotal = txns.reduce((s, t) => s + t.amount, 0);
                   return (
