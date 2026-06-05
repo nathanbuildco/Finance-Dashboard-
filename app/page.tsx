@@ -20,7 +20,7 @@ const PLAN_CSV_URL =
 // ── Land Acquisitions ─────────────────────────────────────────────────────
 // Data lives in the "Land Acquisitions" tab of the linked Google Sheet.
 // Upload a screenshot of the deal sheet on the Cash Needs tab to refresh it.
-interface LandTxn { deal: string; date: string; type: string; amount: number }
+interface LandTxn { deal: string; date: string; type: string; amount: number; uploadedAt?: string }
 
 function getLandForMonth(monthLabel: string, txns: LandTxn[]): LandTxn[] {
   const d = parseMonthLabel(monthLabel);
@@ -792,13 +792,6 @@ export default function Dashboard() {
       const res = await fetch("/api/land-acquisitions/upload", { method: "POST", body: fd });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-      const cleared = body.sheet?.cleared ?? 0;
-      const appended = body.sheet?.appended ?? 0;
-      setLandUploadMsg(
-        `Loaded ${appended} row${appended === 1 ? "" : "s"}${
-          cleared > 0 ? ` — replaced ${cleared} prior row${cleared === 1 ? "" : "s"}` : ""
-        }.`,
-      );
       await loadLand();
     } catch (e) {
       setLandUploadMsg(`Error: ${e instanceof Error ? e.message : String(e)}`);
@@ -806,6 +799,11 @@ export default function Dashboard() {
       setLandUploading(false);
     }
   }, [loadLand]);
+
+  const landUploadedAt = landTxns[0]?.uploadedAt;
+  const landUploadedLabel = landUploadedAt
+    ? new Date(landUploadedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : null;
 
   const load = useCallback(async () => {
     try {
@@ -1393,9 +1391,11 @@ export default function Dashboard() {
               />
             </label>
             <span style={{ color: C.muted, fontSize: 15 }}>
-              {landTxns.length > 0
-                ? `${landTxns.length} row${landTxns.length === 1 ? "" : "s"} loaded from Sheet`
-                : "No data — upload a screenshot of the Cash Requirements table"}
+              {landUploadedLabel
+                ? `Loaded as of ${landUploadedLabel}`
+                : landTxns.length > 0
+                  ? "Loaded"
+                  : "No data — upload a screenshot of the Cash Requirements table"}
             </span>
             {landUploadMsg && (
               <span style={{ color: landUploadMsg.startsWith("Error") ? C.red : C.green, fontSize: 15 }}>{landUploadMsg}</span>
