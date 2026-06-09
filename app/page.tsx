@@ -624,7 +624,7 @@ const SpendTooltip = ({ active, payload }: any) => {
   const lines: { label: string; val: number; color: string }[] = [];
   if (row.operating) lines.push({ label: "Operating Cash", val: row.operating, color: SPEND_NAVY });
   if (row.treasury) lines.push({ label: "Treasury Ladder", val: row.treasury, color: SPEND_NAVY });
-  if (row.ibit) lines.push({ label: "IBIT", val: row.ibit, color: C.orange });
+  if (row.ibit) lines.push({ label: "Bitcoin ETF", val: row.ibit, color: C.orange });
   if (row.mstr) lines.push({ label: "MSTR", val: row.mstr, color: SPEND_MSTR_GRAY });
   if (row.spend) lines.push({ label: row.name, val: -row.spend, color: C.red });
   return (
@@ -679,11 +679,14 @@ function ProjectedSpendTab({ months }: { months: MonthData[] }) {
           const latest = dates[dates.length - 1] || "";
           setLatestPortfolioDate(latest);
           const latestSnaps = snaps.filter((s) => s.statementDate === latest);
-          const sumTicker = (t: string) =>
-            latestSnaps.filter((s) => s.ticker.toUpperCase() === t).reduce((sum, s) => sum + s.marketValue, 0);
-          setIbitValue(sumTicker("IBIT"));
-          setMstrValue(sumTicker("MSTR"));
-          setTreasuryValue(sumTicker("TREASURY"));
+          const sumTickers = (...ts: string[]) => {
+            const set = new Set(ts.map((t) => t.toUpperCase()));
+            return latestSnaps.filter((s) => set.has(s.ticker.toUpperCase())).reduce((sum, s) => sum + s.marketValue, 0);
+          };
+          // Bitcoin ETF exposure — either IBIT (iShares) or MSBT (Morgan Stanley) counts.
+          setIbitValue(sumTickers("IBIT", "MSBT"));
+          setMstrValue(sumTickers("MSTR"));
+          setTreasuryValue(sumTickers("TREASURY"));
         }
         setErr(null);
       } catch (e) {
@@ -751,7 +754,7 @@ function ProjectedSpendTab({ months }: { months: MonthData[] }) {
                     <ul style={{ display: "flex", justifyContent: "center", gap: 28, listStyle: "none", padding: 0, margin: "12px 0 0", flexWrap: "wrap" }}>
                       {[
                         { label: "Operating + Treasury", color: SPEND_NAVY },
-                        { label: "IBIT", color: C.orange },
+                        { label: "Bitcoin ETF", color: C.orange },
                         { label: "MSTR", color: SPEND_MSTR_GRAY },
                         { label: "Spending", color: C.red },
                       ].map((k, i) => (
@@ -814,7 +817,7 @@ function ProjectedSpendTab({ months }: { months: MonthData[] }) {
                   <td style={{ padding: "10px 8px", color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 13 }}>BOP Total Cash</td>
                   <td style={{ padding: "10px 8px", textAlign: "right", color: C.text, fontFamily: "monospace", fontWeight: 700 }}>{fmt(bopTotal)}</td>
                   <td style={{ padding: "10px 8px", color: C.muted, fontSize: 14, textAlign: "right", whiteSpace: "nowrap" }}>
-                    Operating {fmt(operatingCash)} · Treasury {fmt(treasuryValue)} · IBIT {fmt(ibitValue)} · MSTR {fmt(mstrValue)}
+                    Operating {fmt(operatingCash)} · Treasury {fmt(treasuryValue)} · Bitcoin ETF {fmt(ibitValue)} · MSTR {fmt(mstrValue)}
                   </td>
                 </tr>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
@@ -836,7 +839,7 @@ function ProjectedSpendTab({ months }: { months: MonthData[] }) {
                   <td style={{ padding: "10px 8px", color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 13 }}>EOP Total Cash</td>
                   <td style={{ padding: "10px 8px", textAlign: "right", color: C.text, fontFamily: "monospace", fontWeight: 700 }}>{fmt(eopTotal)}</td>
                   <td style={{ padding: "10px 8px", color: C.muted, fontSize: 14, textAlign: "right", whiteSpace: "nowrap" }}>
-                    Operating + Treasury {fmt(eopOpTreas)} · IBIT {fmt(ibitValue)} · MSTR {fmt(mstrValue)}
+                    Operating + Treasury {fmt(eopOpTreas)} · Bitcoin ETF {fmt(ibitValue)} · MSTR {fmt(mstrValue)}
                   </td>
                 </tr>
               </tbody>
@@ -844,7 +847,7 @@ function ProjectedSpendTab({ months }: { months: MonthData[] }) {
           </div>
 
           <div style={{ marginTop: 16, fontSize: 14, color: C.muted, fontStyle: "italic" }}>
-            Assumes 0% IBIT and MSTR value appreciation.
+            Assumes 0% Bitcoin ETF and MSTR value appreciation.
             {latestPortfolioDate && ` Investment values from portfolio snapshot dated ${latestPortfolioDate}.`}
             {treasuryValue === 0 && " Treasury value will appear here after the next portfolio statement upload."}
           </div>
