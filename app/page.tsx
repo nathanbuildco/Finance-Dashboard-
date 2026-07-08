@@ -42,6 +42,7 @@ const SUMMARY_ROW_LABELS = new Set([
   "corporate overhead costs",
   "corporate development costs",
   "project development costs",
+  "architect fees",
   // Job titles / roles in the Employee Payroll Table
   "managing director",
   "director of partnerships",
