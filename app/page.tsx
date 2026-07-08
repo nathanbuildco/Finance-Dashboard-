@@ -1838,7 +1838,7 @@ export default function Dashboard() {
               <ComposedChart data={headcountData} margin={{ top: 56, right: 20, left: 10, bottom: 0 }}>
                 <XAxis dataKey="month" tickFormatter={(v: string) => fmtMonth(v)} tick={{ fill: C.text, fontSize: 20, fontFamily: "monospace" }} axisLine={{ stroke: "#1e2430" }} angle={-45} textAnchor="end" height={90} />
                 <YAxis yAxisId="cost" tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} domain={[0, 30000]} />
-                <YAxis yAxisId="hc" orientation="right" tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} axisLine={false} allowDecimals={false} domain={[0, 15]} />
+                <YAxis yAxisId="hc" orientation="right" tick={{ fill: C.muted, fontSize: 17, fontFamily: "monospace" }} axisLine={false} allowDecimals={false} domain={[0, 20]} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend verticalAlign="top" wrapperStyle={{ fontSize: 20, paddingBottom: 12 }} />
                 <Bar yAxisId="cost" dataKey="avgCost" name="Avg Cost / Employee" fill={C.blue} radius={[4, 4, 0, 0] as [number, number, number, number]} barSize={60} opacity={0.7}>
