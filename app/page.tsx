@@ -19,6 +19,26 @@ const PLAN_CSV_URL =
 const OPERATING_CASH_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTlUqIymbq_OgJ70EoO2uARD86PqF5vKmG_CzYTyzSzxdEXGTtk3mgRf7NhecnaXjhdTpyor_e3-NJ5/pub?gid=1657849898&single=true&output=csv";
 
+// ── Manual Fixed Expenses overrides ───────────────────────────────────────
+// The sheet's Admin row rolls up variable items like Recruiter and AI Engineer,
+// which we don't consider "fixed". Rather than re-derive the formula, projected
+// fixed expenses for these months are pinned to values agreed with finance.
+// Keys are full-name month labels as parsed from the actuals sheet.
+const MANUAL_FIXED_EXPENSES: Record<string, number> = {
+  "July 2026":      113_169,
+  "August 2026":    152_389,
+  "September 2026": 212_264,
+  "October 2026":   211_264,
+  "November 2026":  265_970,
+  "December 2026":  266_120,
+  "January 2027":   266_120,
+  "February 2027":  266_120,
+  "March 2027":     333_114,
+  "April 2027":     333_114,
+  "May 2027":       333_114,
+  "June 2027":      333_114,
+};
+
 // ── Land Acquisitions ─────────────────────────────────────────────────────
 // Data lives in the "Land Acquisitions" tab of the linked Google Sheet.
 // Upload a screenshot of the deal sheet on the Cash Needs tab to refresh it.
@@ -302,11 +322,10 @@ function parseSheet(csv: string): { months: MonthData[]; reviewLabel: string; pi
   const headcountRow = findRow(rows, "total headcount");
   const payrollRow = findRow(rows, "payroll");
 
-  // Fixed expense sub-rows — pinned to specific row indices in the actuals/projections sheet.
-  // Brittle if the sheet layout shifts, but matches what the user told us to look at.
-  const adminRow     = rows[75]  ?? null;  // sheet row 76
-  const officeRow    = rows[83]  ?? null;  // sheet row 84
-  const landCarryRow = rows[119] ?? null;  // sheet row 120
+  // Fixed expense sub-rows — located by label (rows shift when the sheet is edited).
+  const adminRow     = findRow(rows, "admin");
+  const officeRow    = findRow(rows, "office");
+  const landCarryRow = findRow(rows, "land carry");
 
   let corpDevRow: string[] | null = null;
   let projDevRow: string[] | null = null;
@@ -1470,9 +1489,10 @@ export default function Dashboard() {
       const d = parseMonthLabel(m.month);
       const key = d ? `${d.getFullYear()}-${d.getMonth()}` : "";
       const plan = planMap.get(key)?.fixedExpenses ?? 0;
+      const projected = MANUAL_FIXED_EXPENSES[m.month] ?? m.fixedExpenses;
       return {
         month: m.month,
-        projected: m.fixedExpenses,
+        projected,
         plan,
       };
     });
