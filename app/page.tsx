@@ -42,7 +42,7 @@ const CASH_NEEDS_OVERRIDES: Record<string, CashNeedsOverride> = {
   "July 2026": {
     overheadSet: 36_569,
     corpDevSet: 0,
-    projDevSet: 147_461,
+    projDevSet: 152_461,
     excludeLandDeals: ["Bar W"],
   },
 };
