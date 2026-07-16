@@ -1585,8 +1585,8 @@ export default function Dashboard() {
           <div style={{ fontSize: 14, textTransform: "uppercase", letterSpacing: "0.12em", color: C.blue, marginBottom: 6, fontWeight: 600 }}>Financial Projections</div>
           <h1 style={{ fontSize: 44, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>Finance Dashboard</h1>
           <div style={{ fontSize: 20, color: C.muted, marginTop: 10 }}>
-            Actuals through {reviewLabel}
-            <button onClick={load} style={{ marginLeft: 16, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 16 }}>↻ Refresh</button>
+            {tab !== "cashneeds" && <>Actuals through {reviewLabel}</>}
+            <button onClick={load} style={{ marginLeft: tab !== "cashneeds" ? 16 : 0, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 16 }}>↻ Refresh</button>
           </div>
         </div>
         <div style={{ display: "flex", gap: 2, background: C.card, borderRadius: 8, border: `1px solid ${C.border}`, padding: 3, flexWrap: "wrap" }}>
@@ -1915,7 +1915,6 @@ export default function Dashboard() {
       {tab === "cashneeds" && (
         <>
           <Section>Next 2 Months — Projected Cash Needs</Section>
-          <div style={{ color: C.muted, fontSize: 16, marginTop: -12, marginBottom: 20, fontStyle: "italic" }}>As of 7/15/26</div>
 
           {/* Land Acquisitions Upload */}
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", marginBottom: 24 }}>
@@ -1942,6 +1941,8 @@ export default function Dashboard() {
               <span style={{ color: landUploadMsg.startsWith("Error") ? C.red : C.green, fontSize: 15 }}>{landUploadMsg}</span>
             )}
           </div>
+
+          <div style={{ color: C.muted, fontSize: 16, marginBottom: 10, fontStyle: "italic" }}>As of 7/15/26</div>
 
           {/* Cash Needs Cards */}
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
