@@ -19,6 +19,34 @@ const PLAN_CSV_URL =
 const OPERATING_CASH_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTlUqIymbq_OgJ70EoO2uARD86PqF5vKmG_CzYTyzSzxdEXGTtk3mgRf7NhecnaXjhdTpyor_e3-NJ5/pub?gid=1657849898&single=true&output=csv";
 
+// ── Cash Needs tab overrides (this tab only) ──────────────────────────────
+// The Cash Needs tab is meant to be a "live as of today" view — payments
+// already made are backed out here. Overrides for other tabs live elsewhere;
+// this map applies exclusively inside the Cash Needs render block.
+//
+//   overheadDelta / corpDevDelta / projDevDelta : signed adjustments applied
+//     to the parsed monthly values (negative to reduce).
+//   corpDevSet / overheadSet / projDevSet        : force the value (deltas ignored).
+//   excludeLandDeals                             : deal names to drop from the
+//     month's Land Acquisitions detail (case-insensitive substring match).
+interface CashNeedsOverride {
+  overheadDelta?: number;
+  corpDevDelta?: number;
+  projDevDelta?: number;
+  overheadSet?: number;
+  corpDevSet?: number;
+  projDevSet?: number;
+  excludeLandDeals?: string[];
+}
+const CASH_NEEDS_OVERRIDES: Record<string, CashNeedsOverride> = {
+  "July 2026": {
+    overheadSet: 87_569,
+    corpDevSet: 0,
+    projDevSet: 147_461,
+    excludeLandDeals: ["Bar W"],
+  },
+};
+
 // ── Manual Fixed Expenses overrides ───────────────────────────────────────
 // The sheet's Admin row rolls up variable items like Recruiter and AI Engineer,
 // which we don't consider "fixed". Rather than re-derive the formula, projected
@@ -1373,6 +1401,23 @@ export default function Dashboard() {
   // ── Next 2 months data ──
   const next2 = projected.slice(0, 2);
 
+  // ── Cash Needs tab: apply live-as-of-today overrides (this tab only) ──
+  const next2CN = next2.map((m) => {
+    const o = CASH_NEEDS_OVERRIDES[m.month];
+    if (!o) return m;
+    const overhead = o.overheadSet !== undefined ? o.overheadSet : Math.max(0, m.overhead + (o.overheadDelta ?? 0));
+    const corpDev  = o.corpDevSet  !== undefined ? o.corpDevSet  : Math.max(0, m.corpDev  + (o.corpDevDelta  ?? 0));
+    const projDev  = o.projDevSet  !== undefined ? o.projDevSet  : Math.max(0, m.projDev  + (o.projDevDelta  ?? 0));
+    return { ...m, overhead, corpDev, projDev, total: overhead + corpDev + projDev };
+  });
+  const cashNeedsLand = (monthLabel: string): LandTxn[] => {
+    const excluded = CASH_NEEDS_OVERRIDES[monthLabel]?.excludeLandDeals ?? [];
+    const raw = getLandForMonth(monthLabel, landTxns);
+    if (excluded.length === 0) return raw;
+    const lc = excluded.map((s) => s.toLowerCase());
+    return raw.filter((t) => !lc.some((needle) => t.deal.toLowerCase().includes(needle)));
+  };
+
   // ── Quarterly payroll data ──
   // Annualized & FTE are taken from the LAST month of each quarter (run-rate convention),
   // not averaged. Quarterly column stays as the sum of the months in the quarter.
@@ -1906,8 +1951,8 @@ export default function Dashboard() {
 
           {/* Cash Needs Cards */}
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
-            {next2.map((m, idx) => {
-              const monthLand = getLandForMonth(m.month, landTxns);
+            {next2CN.map((m, idx) => {
+              const monthLand = cashNeedsLand(m.month);
               const landTotal = monthLand.reduce((s, t) => s + t.amount, 0);
               const totalCashNeed = m.total + landTotal;
               return (
@@ -1945,13 +1990,13 @@ export default function Dashboard() {
           </div>
 
           {/* Stacked bar comparison */}
-          {next2.length === 2 && (
+          {next2CN.length === 2 && (
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(45vh, 600px)", minHeight: 320 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={next2.map(m => ({
+                  data={next2CN.map(m => ({
                     ...m,
-                    land: getLandForMonth(m.month, landTxns).reduce((s, t) => s + t.amount, 0),
+                    land: cashNeedsLand(m.month).reduce((s, t) => s + t.amount, 0),
                   }))}
                   margin={{ top: 10, right: 30, left: 10, bottom: 0 }}
                 >
@@ -1986,12 +2031,12 @@ export default function Dashboard() {
           )}
 
           {/* Land Acquisitions deal-level detail for the same 2 months */}
-          {next2.some(m => getLandForMonth(m.month, landTxns).length > 0) && (
+          {next2CN.some(m => cashNeedsLand(m.month).length > 0) && (
             <>
               <Section>Land Acquisitions — Detail</Section>
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-                {next2.map((m, idx) => {
-                  const txns = getLandForMonth(m.month, landTxns).slice().sort((a, b) => a.date.localeCompare(b.date));
+                {next2CN.map((m, idx) => {
+                  const txns = cashNeedsLand(m.month).slice().sort((a, b) => a.date.localeCompare(b.date));
                   if (txns.length === 0) return null;
                   const monthTotal = txns.reduce((s, t) => s + t.amount, 0);
                   return (
