@@ -1317,11 +1317,6 @@ export default function Dashboard() {
     }
   }, [loadLand]);
 
-  const landUploadedAt = landTxns[0]?.uploadedAt;
-  const landUploadedLabel = landUploadedAt
-    ? new Date(landUploadedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-    : null;
-
   const load = useCallback(async () => {
     try {
       setLoading(true);
@@ -1937,13 +1932,11 @@ export default function Dashboard() {
                 }}
               />
             </label>
-            <span style={{ color: C.muted, fontSize: 15 }}>
-              {landUploadedLabel
-                ? `Loaded as of ${landUploadedLabel}`
-                : landTxns.length > 0
-                  ? "Loaded"
-                  : "No data — upload a screenshot of the Cash Requirements table"}
-            </span>
+            {landTxns.length === 0 && (
+              <span style={{ color: C.muted, fontSize: 15 }}>
+                No data — upload a screenshot of the Cash Requirements table
+              </span>
+            )}
             {landUploadMsg && (
               <span style={{ color: landUploadMsg.startsWith("Error") ? C.red : C.green, fontSize: 15 }}>{landUploadMsg}</span>
             )}
