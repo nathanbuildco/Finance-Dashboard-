@@ -1915,6 +1915,7 @@ export default function Dashboard() {
       {tab === "cashneeds" && (
         <>
           <Section>Next 2 Months — Projected Cash Needs</Section>
+          <div style={{ color: C.muted, fontSize: 16, marginTop: -12, marginBottom: 20, fontStyle: "italic" }}>As of 7/15/26</div>
 
           {/* Land Acquisitions Upload */}
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", marginBottom: 24 }}>
