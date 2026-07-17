@@ -40,7 +40,7 @@ interface CashNeedsOverride {
 }
 const CASH_NEEDS_OVERRIDES: Record<string, CashNeedsOverride> = {
   "July 2026": {
-    overheadSet: 49_569,
+    overheadSet: 57_569,
     corpDevSet: 0,
     projDevSet: 152_461,
     excludeLandDeals: ["Bar W"],
