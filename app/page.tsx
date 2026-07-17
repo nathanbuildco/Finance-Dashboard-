@@ -40,7 +40,7 @@ interface CashNeedsOverride {
 }
 const CASH_NEEDS_OVERRIDES: Record<string, CashNeedsOverride> = {
   "July 2026": {
-    overheadSet: 36_569,
+    overheadSet: 49_569,
     corpDevSet: 0,
     projDevSet: 152_461,
     excludeLandDeals: ["Bar W"],
@@ -1942,7 +1942,7 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div style={{ color: C.muted, fontSize: 16, marginBottom: 10, fontStyle: "italic" }}>As of 7/16/26</div>
+          <div style={{ color: C.muted, fontSize: 16, marginBottom: 10, fontStyle: "italic" }}>As of 7/17/26</div>
 
           {/* Cash Needs Cards */}
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
