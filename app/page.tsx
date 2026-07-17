@@ -2032,8 +2032,30 @@ export default function Dashboard() {
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
                 {next2CN.map((m, idx) => {
                   const txns = cashNeedsLand(m.month).slice().sort((a, b) => a.date.localeCompare(b.date));
-                  // Empty slot keeps the column aligned with its Cash Needs card above.
-                  if (txns.length === 0) return <div key={idx} style={{ flex: "1 1 380px", minWidth: 380 }} aria-hidden="true" />;
+                  if (txns.length === 0) {
+                    return (
+                      <div key={idx} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "24px 28px", flex: "1 1 380px", minWidth: 380 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                          <div style={{ fontSize: 28, fontWeight: 700 }}>{m.month}</div>
+                          <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "monospace", color: C.muted }}>—</div>
+                        </div>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 18 }}>
+                          <thead>
+                            <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                              {["Deal", "Estimated Date", "Type", "Amount"].map((h, i) => (
+                                <th key={i} style={{ padding: "10px 8px", textAlign: i === 3 ? "right" : "left", color: C.muted, fontWeight: 600, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td colSpan={4} style={{ padding: "24px 8px", color: C.muted, fontStyle: "italic", textAlign: "center" }}>Nothing outstanding</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  }
                   const monthTotal = txns.reduce((s, t) => s + t.amount, 0);
                   return (
                     <div key={idx} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "24px 28px", flex: "1 1 380px", minWidth: 380 }}>
