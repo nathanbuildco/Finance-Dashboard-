@@ -65,6 +65,7 @@ const MANUAL_FIXED_EXPENSES: Record<string, number> = {
   "April 2027":     333_114,
   "May 2027":       333_114,
   "June 2027":      333_114,
+  "July 2027":      333_114,
 };
 
 // ── Land Acquisitions ─────────────────────────────────────────────────────
@@ -2082,6 +2083,10 @@ export default function Dashboard() {
                     );
                   }
                   const monthTotal = txns.reduce((s, t) => s + t.amount, 0);
+                  const NOT_UNDER_CONTRACT = ["tito", "texas aggregates"];
+                  const isNotUnderContract = (deal: string) =>
+                    NOT_UNDER_CONTRACT.some((needle) => deal.toLowerCase().includes(needle));
+                  const anyNotUnderContract = txns.some((t) => isNotUnderContract(t.deal));
                   return (
                     <div key={idx} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "24px 28px", flex: "1 1 380px", minWidth: 380 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -2100,9 +2105,10 @@ export default function Dashboard() {
                           {txns.map((t, i) => {
                             const [y, mo, d] = t.date.split("-").map(Number);
                             const dateLabel = `${mo}/${d}/${String(y).slice(2)}`;
+                            const marker = isNotUnderContract(t.deal) ? " *" : "";
                             return (
                               <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                                <td style={{ padding: "10px 8px", fontWeight: 600 }}>{t.deal}</td>
+                                <td style={{ padding: "10px 8px", fontWeight: 600 }}>{t.deal}{marker}</td>
                                 <td style={{ padding: "10px 8px", color: C.muted, fontFamily: "monospace" }}>{dateLabel}</td>
                                 <td style={{ padding: "10px 8px", color: C.muted }}>{t.type}</td>
                                 <td style={{ padding: "10px 8px", textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>{fmtFull(t.amount)}</td>
@@ -2111,6 +2117,11 @@ export default function Dashboard() {
                           })}
                         </tbody>
                       </table>
+                      {anyNotUnderContract && (
+                        <div style={{ marginTop: 12, fontSize: 14, color: C.muted, fontStyle: "italic" }}>
+                          * Not yet under contract
+                        </div>
+                      )}
                     </div>
                   );
                 })}
