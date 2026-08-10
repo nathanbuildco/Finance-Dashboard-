@@ -1942,7 +1942,7 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div style={{ color: C.muted, fontSize: 16, marginBottom: 10, fontStyle: "italic" }}>As of 7/17/26</div>
+          <div style={{ color: C.muted, fontSize: 16, marginBottom: 10, fontStyle: "italic" }}>As of 8/10/26</div>
 
           {/* Cash Needs Cards */}
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
