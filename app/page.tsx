@@ -90,7 +90,16 @@ const SUMMARY_ROW_LABELS = new Set([
   "corporate overhead costs",
   "corporate development costs",
   "project development costs",
-  "architect fees",
+  // Architect sub-vendors — surface the parent "Architect Fees" rollup instead of these.
+  "dk&p",
+  "building architect",
+  "other architect fees",
+  "landscape architect design",
+  // Engineering sub-vendor (Kimley Horn / Building Engineer are caught by the person-name filter).
+  "civil",
+  // Payroll and admin rollups — sub-lines belong to categories already ranked separately.
+  "total salaries",
+  "admin",
   // Job titles / roles in the Employee Payroll Table
   "managing director",
   "director of partnerships",
@@ -109,7 +118,6 @@ const SUMMARY_ROW_LABELS = new Set([
   "employee payroll table",
   "total headcount",
   "average cost",
-  "payroll",
   "total insurance",
   "recruiting",
   "role",
@@ -1502,12 +1510,29 @@ export default function Dashboard() {
   }, [overviewData, planMonths]);
 
   // ── Top 3 line-item expenses by NTM spend ──
-  // Skips category rollup rows (Total Costs, Corp Overhead Costs, Corp Dev Costs, Project Dev Costs).
-  // Captures monthly trend across the NTM window for the per-card sparkline.
+  // Whitelist of the actual cost-bucket categories from the Actuals + Projections sheet.
+  // Only these labels are ranked; the Top 3 are the three highest-NTM entries.
+  // Match is case-insensitive with normalized whitespace.
   const topExpenses = useMemo(() => {
     if (overviewData.length === 0) return [];
+    const BUCKETS = new Set([
+      "payroll",
+      "travel",
+      "admin",
+      "office",
+      "legal (fundraise, company set up)",
+      "design and branding",
+      "engineering",
+      "architect fees",
+      "due diligence - acquisitions",
+      "broker fees",
+      "legal",
+      "placeholder",
+      "land carry",
+    ]);
+    const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
     return lineItems
-      .filter(li => !isExcludedLabel(li.label))
+      .filter(li => BUCKETS.has(norm(li.label)))
       .map(li => {
         const monthly = overviewData.map(m => li.monthly[m.month] || 0);
         const ntmTotal = monthly.reduce((s, v) => s + v, 0);
