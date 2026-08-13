@@ -1280,7 +1280,7 @@ function CashRequirementsTab() {
               <tbody>
                 {visible.deals.map((deal, di) => {
                   const rowBg = di % 2 === 0 ? C.card : "#171c26";
-                  const notUnderContract = /tito|texas\s*aggregate/i.test(deal.name);
+                  const notUnderContract = /tito|texas\s*aggregate|north\s*entrance|south\s*entrance/i.test(deal.name);
                   return (
                     <tr key={di}>
                       <td style={{
@@ -1361,7 +1361,7 @@ function CashRequirementsTab() {
               </tbody>
             </table>
           </div>
-          {visible.deals.some((d) => /tito|texas\s*aggregate/i.test(d.name)) && (
+          {visible.deals.some((d) => /tito|texas\s*aggregate|north\s*entrance|south\s*entrance/i.test(d.name)) && (
             <div style={{ padding: "12px 20px", fontSize: 14, color: C.muted, fontStyle: "italic", borderTop: `1px solid ${C.border}` }}>
               * Not yet under contract
             </div>
