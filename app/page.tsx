@@ -1281,6 +1281,9 @@ function CashRequirementsTab() {
                 {visible.deals.map((deal, di) => {
                   const rowBg = di % 2 === 0 ? C.card : "#171c26";
                   const notUnderContract = /tito|texas\s*aggregate|north\s*entrance|south\s*entrance/i.test(deal.name);
+                  const footnoteNum = /^h&pb\s*basco$/i.test(deal.name) ? 1
+                    : /^tex\s*mix$/i.test(deal.name) ? 2
+                    : null;
                   return (
                     <tr key={di}>
                       <td style={{
@@ -1289,7 +1292,9 @@ function CashRequirementsTab() {
                         padding: "12px 16px", fontWeight: 700, color: C.text,
                         borderRight: `2px solid ${C.border}`, borderBottom: `1px solid ${C.border}`,
                         verticalAlign: "middle", minWidth: 200,
-                      }}>{deal.name}{notUnderContract ? " *" : ""}</td>
+                      }}>{deal.name}{footnoteNum && (
+                        <sup style={{ fontSize: 10, marginLeft: 2, color: C.muted, fontWeight: 700 }}>({footnoteNum})</sup>
+                      )}{notUnderContract ? " *" : ""}</td>
                       {deal.cells.map((events, mi) => (
                         <td key={mi} style={{
                           background: rowBg, padding: "10px 12px", textAlign: "center",
@@ -1366,6 +1371,78 @@ function CashRequirementsTab() {
               * Not yet under contract
             </div>
           )}
+          {(() => {
+            // Per-deal Dec-26 breakdown callouts — one per deal, shown when that
+            // cell is visible in the current window. Only "Owed at close" is a
+            // real cash movement; the other two lines are informational.
+            const BREAKDOWNS: {
+              matcher: RegExp;
+              title: string;
+              year: number;
+              month0: number;
+              rows: { label: string; amount: number }[];
+            }[] = [
+              {
+                matcher: /^h&pb\s*basco$/i,
+                title: "H&PB Basco Closing",
+                year: 2026,
+                month0: 11,
+                rows: [
+                  { label: "Gross Closing",  amount:  94_834_000 },
+                  { label: "1031 exchange",  amount: -31_613_105 },
+                  { label: "Owed at close",  amount:  63_220_895 },
+                ],
+              },
+              {
+                matcher: /^tex\s*mix$/i,
+                title: "Tex Mix Closing",
+                year: 2026,
+                month0: 11,
+                rows: [
+                  { label: "Gross Closing",  amount:  85_116_500 },
+                  { label: "1031 exchange",  amount: -27_755_813 },
+                  { label: "Owed at close",  amount:  57_360_687 },
+                ],
+              },
+            ];
+            const shown = BREAKDOWNS.filter((b) => {
+              const deal = visible.deals.find((d) => b.matcher.test(d.name));
+              const mi = visible.months.findIndex((m) => m.year === b.year && m.month0 === b.month0);
+              return !!deal && mi >= 0 && !!deal.cells[mi] && deal.cells[mi]!.length > 0;
+            });
+            if (shown.length === 0) return null;
+            return (
+              <div style={{ padding: "16px 20px 18px", borderTop: `1px solid ${C.border}`, display: "flex", gap: 40, flexWrap: "wrap" }}>
+                {shown.map((b, bi) => {
+                  const num = /^h&pb/i.test(b.title) ? 1 : /^tex\s*mix/i.test(b.title) ? 2 : bi + 1;
+                  return (
+                  <div key={bi}>
+                    <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: C.muted, fontWeight: 700, marginBottom: 10 }}>
+                      ({num}) {b.title}
+                    </div>
+                    <table style={{ borderCollapse: "collapse", fontSize: 14 }}>
+                      <tbody>
+                        {b.rows.map((r, i) => {
+                          const isTotal = i === b.rows.length - 1;
+                          const neg = r.amount < 0;
+                          const formatted = neg
+                            ? `(${fmtMoneyCell(Math.abs(r.amount))})`
+                            : fmtMoneyCell(r.amount);
+                          return (
+                            <tr key={i} style={{ borderTop: isTotal ? `1px solid ${C.border}` : undefined }}>
+                              <td style={{ padding: "6px 24px 6px 0", color: isTotal ? C.text : C.muted, fontWeight: isTotal ? 700 : 500 }}>{r.label}</td>
+                              <td style={{ padding: "6px 0", textAlign: "right", fontFamily: "monospace", fontWeight: isTotal ? 700 : 600, color: neg ? C.gold : C.text, minWidth: 140 }}>{formatted}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
     </>
