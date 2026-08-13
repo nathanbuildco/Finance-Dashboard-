@@ -1218,9 +1218,9 @@ function CashRequirementsTab() {
       <Section>Acquisitions Cash Requirements</Section>
 
       {/* Upload control */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", marginBottom: 20 }}>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 12, cursor: uploading ? "wait" : "pointer", background: uploading ? C.border : C.blue, color: C.bg, padding: "10px 22px", borderRadius: 8, fontWeight: 600, fontSize: 16 }}>
-          {uploading ? "Parsing…" : "Upload Cash Requirements screenshot"}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: uploading ? "wait" : "pointer", background: uploading ? C.border : C.blue, color: C.bg, padding: "5px 12px", borderRadius: 6, fontWeight: 600, fontSize: 12 }}>
+          {uploading ? "Parsing…" : "Upload screenshot"}
           <input
             type="file"
             accept="image/png,image/jpeg,image/gif,image/webp,.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
@@ -1234,7 +1234,7 @@ function CashRequirementsTab() {
           />
         </label>
         {uploadMsg && (
-          <span style={{ color: uploadMsg.startsWith("Error") ? C.red : C.green, fontSize: 15 }}>{uploadMsg}</span>
+          <span style={{ color: uploadMsg.startsWith("Error") ? C.red : C.green, fontSize: 12 }}>{uploadMsg}</span>
         )}
       </div>
 
@@ -1888,8 +1888,8 @@ export default function Dashboard() {
           <div style={{ fontSize: 14, textTransform: "uppercase", letterSpacing: "0.12em", color: C.blue, marginBottom: 6, fontWeight: 600 }}>Financial Projections</div>
           <h1 style={{ fontSize: 44, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>Finance Dashboard</h1>
           <div style={{ fontSize: 20, color: C.muted, marginTop: 10 }}>
-            {tab !== "cashneeds" && <>Actuals through {reviewLabel}</>}
-            <button onClick={load} style={{ marginLeft: tab !== "cashneeds" ? 16 : 0, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 16 }}>↻ Refresh</button>
+            {tab !== "cashneeds" && tab !== "cashreq" && <>Actuals through {reviewLabel}</>}
+            <button onClick={load} style={{ marginLeft: tab !== "cashneeds" && tab !== "cashreq" ? 16 : 0, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 16 }}>↻ Refresh</button>
           </div>
         </div>
         <div style={{ display: "flex", gap: 2, background: C.card, borderRadius: 8, border: `1px solid ${C.border}`, padding: 3, flexWrap: "wrap" }}>
