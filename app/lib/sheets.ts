@@ -1,6 +1,7 @@
 import { google, sheets_v4 } from "googleapis";
 import type { Holding, ParsedStatement } from "./portfolio-parser";
 import type { LandTxn } from "./land-parser";
+import type { Schedule } from "./cash-req-parser";
 
 export const PORTFOLIO_TAB = "Portfolio";
 export const PORTFOLIO_HEADERS = [
@@ -26,6 +27,19 @@ export const LAND_HEADERS = [
 ] as const;
 
 export const CLOSED_TAB = "Acquisitions Closed";
+
+export const CASH_REQ_TAB = "Cash Requirements";
+export const CASH_REQ_HEADERS = [
+  "Deal",
+  "Month Label",
+  "Month Year",
+  "Month Index",
+  "Event Date",
+  "Event Label",
+  "Amount",
+  "Raw Amount",
+  "Uploaded At",
+] as const;
 
 export interface ClosedAcquisitionRow {
   dealName: string;
@@ -413,4 +427,178 @@ export async function listClosedAcquisitions(): Promise<ClosedAcquisitionRow[]> 
     });
   }
   return out;
+}
+
+async function ensureCashReqTab(
+  sheets: sheets_v4.Sheets,
+  spreadsheetId: string,
+): Promise<number> {
+  let sheetId = await getTabSheetId(sheets, spreadsheetId, CASH_REQ_TAB);
+  if (sheetId !== null) return sheetId;
+
+  const created = await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [{ addSheet: { properties: { title: CASH_REQ_TAB } } }],
+    },
+  });
+  sheetId = created.data.replies?.[0]?.addSheet?.properties?.sheetId ?? null;
+  if (sheetId === null) throw new Error("Failed to create Cash Requirements tab.");
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `${CASH_REQ_TAB}!A1`,
+    valueInputOption: "RAW",
+    requestBody: { values: [CASH_REQ_HEADERS as unknown as string[]] },
+  });
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          repeatCell: {
+            range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
+            cell: {
+              userEnteredFormat: {
+                textFormat: { bold: true },
+                horizontalAlignment: "CENTER",
+              },
+            },
+            fields: "userEnteredFormat(textFormat,horizontalAlignment)",
+          },
+        },
+        {
+          updateSheetProperties: {
+            properties: { sheetId, gridProperties: { frozenRowCount: 1 } },
+            fields: "gridProperties.frozenRowCount",
+          },
+        },
+      ],
+    },
+  });
+
+  return sheetId;
+}
+
+export async function replaceCashRequirements(
+  schedule: Schedule,
+): Promise<{ cleared: number; appended: number }> {
+  const { sheets, spreadsheetId } = getSheetsClient();
+  await ensureCashReqTab(sheets, spreadsheetId);
+
+  const existing = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${CASH_REQ_TAB}!A2:A`,
+  });
+  const cleared = (existing.data.values ?? []).length;
+  if (cleared > 0) {
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId,
+      range: `${CASH_REQ_TAB}!A2:I`,
+    });
+  }
+
+  const uploadedAt = new Date().toISOString();
+  const rows: (string | number)[][] = [];
+  for (const deal of schedule.deals) {
+    for (let mi = 0; mi < schedule.months.length; mi++) {
+      const events = deal.cells[mi];
+      if (!events) continue;
+      const m = schedule.months[mi];
+      for (const ev of events) {
+        rows.push([
+          deal.name,
+          m.label,
+          m.year,
+          m.month0,
+          ev.date,
+          ev.label,
+          ev.amount,
+          ev.rawAmount,
+          uploadedAt,
+        ]);
+      }
+    }
+  }
+
+  if (rows.length > 0) {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: `${CASH_REQ_TAB}!A1`,
+      valueInputOption: "RAW",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: { values: rows },
+    });
+  }
+
+  return { cleared, appended: rows.length };
+}
+
+export async function listCashRequirements(): Promise<Schedule | null> {
+  const { sheets, spreadsheetId } = getSheetsClient();
+  const tab = await getTabSheetId(sheets, spreadsheetId, CASH_REQ_TAB);
+  if (tab === null) return null;
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${CASH_REQ_TAB}!A2:I`,
+  });
+  const rows = res.data.values ?? [];
+  if (rows.length === 0) return null;
+
+  // Rebuild months in chronological order.
+  const monthMap = new Map<string, { year: number; month0: number; label: string }>();
+  for (const r of rows) {
+    const label = String(r[1] ?? "").trim();
+    const year = Number(r[2] ?? 0);
+    const month0 = Number(r[3] ?? 0);
+    if (!label || !Number.isFinite(year) || !Number.isFinite(month0)) continue;
+    const key = `${year}-${month0}`;
+    if (!monthMap.has(key)) monthMap.set(key, { year, month0, label });
+  }
+  const months = Array.from(monthMap.values()).sort(
+    (a, b) => a.year - b.year || a.month0 - b.month0,
+  );
+  const monthIndexByKey = new Map(months.map((m, i) => [`${m.year}-${m.month0}`, i]));
+
+  // Rebuild deals in first-seen order (preserve upload order).
+  const dealMap = new Map<string, (({ date: string; label: string; amount: number; rawAmount: string }[]) | null)[]>();
+  const dealOrder: string[] = [];
+  for (const r of rows) {
+    const name = String(r[0] ?? "").trim();
+    if (!name) continue;
+    const year = Number(r[2] ?? 0);
+    const month0 = Number(r[3] ?? 0);
+    const mi = monthIndexByKey.get(`${year}-${month0}`);
+    if (mi === undefined) continue;
+    if (!dealMap.has(name)) {
+      dealMap.set(name, new Array(months.length).fill(null));
+      dealOrder.push(name);
+    }
+    const cells = dealMap.get(name)!;
+    if (!cells[mi]) cells[mi] = [];
+    cells[mi]!.push({
+      date: String(r[4] ?? ""),
+      label: String(r[5] ?? ""),
+      amount: Number(r[6] ?? 0),
+      rawAmount: String(r[7] ?? ""),
+    });
+  }
+  const deals = dealOrder.map((name) => ({ name, cells: dealMap.get(name)! }));
+
+  const monthlyTotalsComputed = months.map((_, mi) =>
+    deals.reduce((sum, d) => sum + (d.cells[mi]?.reduce((s, e) => s + e.amount, 0) ?? 0), 0),
+  );
+  let running = 0;
+  const cumulativeComputed = monthlyTotalsComputed.map((v) => (running += v));
+
+  return {
+    sheetName: CASH_REQ_TAB,
+    months,
+    deals,
+    monthlyTotalsComputed,
+    cumulativeComputed,
+    warnings: [],
+  };
 }

@@ -538,6 +538,7 @@ const C = {
   blue: "#4fc3f7", purple: "#ab47bc", green: "#66bb6a",
   red: "#ef5350", orange: "#ffa726", yellow: "#ffee58",
   gold: "#d4a574",
+  navyBand: "#1a2740",
 };
 
 // ══════════════════════════════════════════════
@@ -1096,6 +1097,281 @@ function AcquisitionsClosedTab() {
   );
 }
 
+// ══════════════════════════════════════════════
+// CASH REQUIREMENTS TAB
+// ══════════════════════════════════════════════
+// A wide, month-across-columns table of upcoming cash outflows per deal —
+// mirrors the source spreadsheet layout. Data is loaded from the "Cash
+// Requirements" tab in the linked Google Sheet, populated by uploading the
+// underlying .xlsx via the button at the top of this tab.
+interface CashReqMonth { year: number; month0: number; label: string }
+interface CashReqEvent { date: string; label: string; amount: number; rawAmount: string }
+interface CashReqDeal { name: string; cells: (CashReqEvent[] | null)[] }
+interface CashReqSchedule {
+  sheetName: string;
+  months: CashReqMonth[];
+  deals: CashReqDeal[];
+  monthlyTotalsComputed: number[];
+  cumulativeComputed: number[];
+  monthlyTotalsFromFile?: number[];
+  cumulativeFromFile?: number[];
+  warnings: string[];
+}
+
+function fmtMoneyCell(n: number): string {
+  if (n === 0) return "—";
+  const sign = n < 0 ? "-" : "";
+  return `${sign}$${Math.round(Math.abs(n)).toLocaleString()}`;
+}
+
+function CashRequirementsTab() {
+  const [schedule, setSchedule] = useState<CashReqSchedule | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await fetch("/api/cash-requirements/list", { cache: "no-store" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setSchedule(data.schedule);
+      setErr(null);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function handleUpload(file: File) {
+    setUploading(true);
+    setUploadMsg(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/cash-requirements/upload", { method: "POST", body: fd });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      const sc: CashReqSchedule = body.schedule;
+      setSchedule(sc);
+      const appended = body.sheet?.appended ?? 0;
+      setUploadMsg(
+        `Loaded ${sc.deals.length} deals across ${sc.months.length} months (${appended} events written).`,
+      );
+    } catch (e) {
+      setUploadMsg(`Error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  // Filter the schedule to only current month + forward, and fill in any calendar
+  // gaps between the current month and the last month with events so the columns
+  // read continuously. Cumulative is recomputed to start at the first visible month.
+  const visible = useMemo(() => {
+    if (!schedule || schedule.months.length === 0) return null;
+    const MONTH_ABBRS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const now = new Date();
+    const startT = now.getFullYear() * 12 + now.getMonth();
+    const lastMonth = schedule.months[schedule.months.length - 1];
+    const endT = lastMonth.year * 12 + lastMonth.month0;
+    if (endT < startT) return { months: [], deals: [], monthlyTotals: [], cumulative: [] };
+
+    // Continuous month sequence current → last-scheduled-month.
+    const months: { year: number; month0: number; label: string }[] = [];
+    for (let t = startT; t <= endT; t++) {
+      const year = Math.floor(t / 12);
+      const month0 = t % 12;
+      months.push({ year, month0, label: `${MONTH_ABBRS[month0]}-${String(year).slice(2)}` });
+    }
+    const schedIdxByKey = new Map<string, number>();
+    schedule.months.forEach((m, i) => schedIdxByKey.set(`${m.year}-${m.month0}`, i));
+
+    const deals = schedule.deals
+      .map((d) => ({
+        name: d.name,
+        cells: months.map((m) => {
+          const oi = schedIdxByKey.get(`${m.year}-${m.month0}`);
+          return oi !== undefined ? d.cells[oi] : null;
+        }),
+      }))
+      .filter((d) => d.cells.some((c) => c && c.length > 0));
+
+    const monthlyTotals = months.map((m) => {
+      const oi = schedIdxByKey.get(`${m.year}-${m.month0}`);
+      return oi !== undefined ? schedule.monthlyTotalsComputed[oi] : 0;
+    });
+    let running = 0;
+    const cumulative = monthlyTotals.map((v) => (running += v));
+    return { months, deals, monthlyTotals, cumulative };
+  }, [schedule]);
+
+  return (
+    <>
+      <Section>Acquisitions Cash Requirements</Section>
+
+      {/* Upload control */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", marginBottom: 20 }}>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 12, cursor: uploading ? "wait" : "pointer", background: uploading ? C.border : C.blue, color: C.bg, padding: "10px 22px", borderRadius: 8, fontWeight: 600, fontSize: 16 }}>
+          {uploading ? "Parsing…" : "Upload Cash Requirements screenshot"}
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp,.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
+            disabled={uploading}
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleUpload(f);
+              e.target.value = "";
+            }}
+          />
+        </label>
+        {uploadMsg && (
+          <span style={{ color: uploadMsg.startsWith("Error") ? C.red : C.green, fontSize: 15 }}>{uploadMsg}</span>
+        )}
+      </div>
+
+      {loading && <div style={{ color: C.muted, marginTop: 12 }}>Loading…</div>}
+      {err && <div style={{ color: C.red, marginTop: 12 }}>{err}</div>}
+
+      {!loading && !err && !schedule && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "32px 28px", color: C.muted, fontSize: 16 }}>
+          No Cash Requirements data yet. Upload the source .xlsx above.
+        </div>
+      )}
+
+      {!loading && !err && schedule && visible && visible.deals.length === 0 && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "32px 28px", color: C.muted, fontSize: 16 }}>
+          No cash requirements from the current month onward. Upload an updated schedule if this looks wrong.
+        </div>
+      )}
+
+      {visible && visible.deals.length > 0 && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ overflowX: "auto", maxWidth: "100%" }}>
+            <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 14, minWidth: "100%" }}>
+              <thead>
+                <tr>
+                  <th style={{
+                    position: "sticky", left: 0, top: 0, zIndex: 3,
+                    background: C.navyBand, color: C.text, textTransform: "uppercase",
+                    fontSize: 12, letterSpacing: "0.08em", fontWeight: 700,
+                    padding: "14px 16px", textAlign: "left", minWidth: 200,
+                    borderRight: `2px solid ${C.border}`, borderBottom: `1px solid ${C.border}`,
+                  }}>Deal</th>
+                  {visible.months.map((m, mi) => (
+                    <th key={mi} style={{
+                      position: "sticky", top: 0, zIndex: 2,
+                      background: C.navyBand, color: C.text, textTransform: "uppercase",
+                      fontSize: 12, letterSpacing: "0.08em", fontWeight: 700,
+                      padding: "14px 14px", textAlign: "center", minWidth: 130,
+                      borderBottom: `1px solid ${C.border}`,
+                    }}>{m.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {visible.deals.map((deal, di) => {
+                  const rowBg = di % 2 === 0 ? C.card : "#171c26";
+                  const notUnderContract = /tito|texas\s*aggregate/i.test(deal.name);
+                  return (
+                    <tr key={di}>
+                      <td style={{
+                        position: "sticky", left: 0, zIndex: 1,
+                        background: rowBg,
+                        padding: "12px 16px", fontWeight: 700, color: C.text,
+                        borderRight: `2px solid ${C.border}`, borderBottom: `1px solid ${C.border}`,
+                        verticalAlign: "middle", minWidth: 200,
+                      }}>{deal.name}{notUnderContract ? " *" : ""}</td>
+                      {deal.cells.map((events, mi) => (
+                        <td key={mi} style={{
+                          background: rowBg, padding: "10px 12px", textAlign: "center",
+                          borderBottom: `1px solid ${C.border}`, verticalAlign: "middle",
+                          minWidth: 130,
+                        }}>
+                          {events && events.length > 0 ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                              {events.map((ev, ei) => {
+                                const [y, mo, d] = ev.date.split("-").map(Number);
+                                const dateLabel = mo && d ? `${mo}/${d}` : ev.date;
+                                return (
+                                  <div key={ei} style={{ lineHeight: 1.25 }}>
+                                    <div style={{ fontSize: 11, color: C.muted, fontFamily: "monospace" }}>{dateLabel}</div>
+                                    <div style={{ fontSize: 11, color: C.muted }}>{ev.label}</div>
+                                    <div style={{ fontSize: 14, color: C.text, fontFamily: "monospace", fontWeight: 700 }}>
+                                      {fmtMoneyCell(ev.amount)}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <span style={{ color: C.muted }}>&nbsp;</span>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+                {/* Monthly Totals row */}
+                <tr>
+                  <td style={{
+                    position: "sticky", left: 0, zIndex: 1,
+                    background: C.card,
+                    padding: "14px 16px", fontWeight: 700, color: C.text,
+                    borderRight: `2px solid ${C.border}`,
+                    borderTop: `2px solid ${C.text}`, borderBottom: `1px solid ${C.border}`,
+                    textTransform: "uppercase", fontSize: 12, letterSpacing: "0.06em",
+                    minWidth: 200,
+                  }}>Monthly Totals</td>
+                  {visible.monthlyTotals.map((v, mi) => (
+                    <td key={mi} style={{
+                      background: C.card, padding: "14px 12px", textAlign: "center",
+                      borderTop: `2px solid ${C.text}`, borderBottom: `1px solid ${C.border}`,
+                      color: C.text, fontFamily: "monospace", fontWeight: 700, fontSize: 14,
+                      minWidth: 130,
+                    }}>{fmtMoneyCell(v)}</td>
+                  ))}
+                </tr>
+                {/* Cumulative row */}
+                <tr>
+                  <td style={{
+                    position: "sticky", left: 0, zIndex: 1,
+                    background: C.navyBand, color: C.text,
+                    padding: "14px 16px", fontWeight: 700,
+                    borderRight: `2px solid ${C.border}`,
+                    textTransform: "uppercase", fontSize: 12, letterSpacing: "0.06em",
+                    minWidth: 200,
+                  }}>Cumulative</td>
+                  {visible.cumulative.map((v, mi) => (
+                    <td key={mi} style={{
+                      background: C.navyBand, padding: "14px 12px", textAlign: "center",
+                      color: C.text, fontFamily: "monospace", fontWeight: 700, fontSize: 14,
+                      minWidth: 130,
+                    }}>{fmtMoneyCell(v)}</td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          {visible.deals.some((d) => /tito|texas\s*aggregate/i.test(d.name)) && (
+            <div style={{ padding: "12px 20px", fontSize: 14, color: C.muted, fontStyle: "italic", borderTop: `1px solid ${C.border}` }}>
+              * Not yet under contract
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 function PortfolioTab() {
   const [snapshots, setSnapshots] = useState<PortfolioSnapshot[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>("");
@@ -1598,6 +1874,7 @@ export default function Dashboard() {
     { id: "portfolio", label: "Investment Portfolio" },
     { id: "closed", label: "Acquisitions Closed" },
     { id: "projspend", label: "Projected Spend" },
+    { id: "cashreq", label: "Acquisitions Cash Requirements" },
   ];
 
   return (
@@ -2287,6 +2564,8 @@ export default function Dashboard() {
       {tab === "portfolio" && <PortfolioTab />}
 
       {tab === "closed" && <AcquisitionsClosedTab />}
+
+      {tab === "cashreq" && <CashRequirementsTab />}
 
       {tab === "projspend" && <ProjectedSpendTab months={months} />}
 
