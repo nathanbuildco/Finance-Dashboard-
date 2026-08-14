@@ -48,25 +48,14 @@ const CASH_NEEDS_OVERRIDES: Record<string, CashNeedsOverride> = {
 };
 
 // ── Manual Fixed Expenses overrides ───────────────────────────────────────
-// The sheet's Admin row rolls up variable items like Recruiter and AI Engineer,
-// which we don't consider "fixed". Rather than re-derive the formula, projected
-// fixed expenses for these months are pinned to values agreed with finance.
-// Keys are full-name month labels as parsed from the actuals sheet.
-const MANUAL_FIXED_EXPENSES: Record<string, number> = {
-  "July 2026":      113_169,
-  "August 2026":    152_389,
-  "September 2026": 212_264,
-  "October 2026":   211_264,
-  "November 2026":  265_970,
-  "December 2026":  266_120,
-  "January 2027":   266_120,
-  "February 2027":  266_120,
-  "March 2027":     333_114,
-  "April 2027":     333_114,
-  "May 2027":       333_114,
-  "June 2027":      333_114,
-  "July 2027":      333_114,
-};
+// Historically this pinned NTM fixed expenses to values agreed with finance
+// (stripping Recruiter/AI Engineer out of the sheet's Admin row). It's now
+// empty so `m.fixedExpenses` (Payroll + Admin + Office + Land Carry from the
+// sheet) is the source of truth for both the Fixed Expenses tab display and
+// the Check 4 reconciliation — the two tie exactly. Populate this map to
+// override a specific month if the sheet's Admin row picks up something
+// that shouldn't be counted as fixed.
+const MANUAL_FIXED_EXPENSES: Record<string, number> = {};
 
 // ── Land Acquisitions ─────────────────────────────────────────────────────
 // Data lives in the "Land Acquisitions" tab of the linked Google Sheet.
@@ -1080,9 +1069,8 @@ function VariableSpendTab({ months, lineItems }: { months: MonthData[]; lineItem
             <KPI label="EOP Total" value={fmt(eopTotal)} sub={ntmRange ? `End: ${ntm[11]?.month ?? ""}` : undefined} />
           </div>
 
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "stretch" }}>
-            {/* Waterfall chart */}
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(60vh, 720px)", minHeight: 460, flex: "1 1 640px", minWidth: 520 }}>
+          {/* Waterfall chart */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(60vh, 720px)", minHeight: 460 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 24, right: 30, left: 10, bottom: 20 }}>
                   <XAxis dataKey="name" tick={{ fill: C.text, fontSize: 15 }} axisLine={{ stroke: "#1e2430" }} interval={0} angle={-12} textAnchor="end" height={70} />
@@ -1139,57 +1127,8 @@ function VariableSpendTab({ months, lineItems }: { months: MonthData[]; lineItem
               </ResponsiveContainer>
             </div>
 
-            {/* Other Variable Expenses breakdown card */}
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", flex: "1 1 300px", minWidth: 280, maxWidth: 380, alignSelf: "stretch" }}>
-              <div style={{ color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Other Variable Expenses</div>
-              <div style={{ fontSize: 28, fontFamily: "monospace", fontWeight: 700, color: C.text, marginBottom: 14 }}>{fmt(catTotals.other)}</div>
-              {otherBreakdown.length === 0 ? (
-                <div style={{ color: C.muted, fontStyle: "italic", fontSize: 14 }}>No line items projected in NTM.</div>
-              ) : (
-                <div>
-                  {otherBreakdown.map((row, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderTop: i === 0 ? undefined : `1px solid ${C.border}` }}>
-                      <span style={{ color: C.text, fontSize: 14, textTransform: "capitalize" }}>{row.label}</span>
-                      <span style={{ color: C.text, fontFamily: "monospace", fontWeight: 600, fontSize: 14 }}>{fmt(row.total)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Breakdown table */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", marginTop: 20 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 16 }}>
-              <tbody>
-                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                  <td style={{ padding: "10px 8px", color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 13 }}>BOP Total Cash</td>
-                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.text, fontFamily: "monospace", fontWeight: 700 }}>{fmt(bopTotal)}</td>
-                  <td style={{ padding: "10px 8px", color: C.muted, fontSize: 14, textAlign: "right", whiteSpace: "nowrap" }}>
-                    Operating {fmt(operatingCash)} · Treasury {fmt(treasuryValue)} · Bitcoin ETF {fmt(ibitValue)} · MSTR {fmt(mstrValue)}
-                  </td>
-                </tr>
-                {catOrder.map((cat) => (
-                  <tr key={cat} style={{ borderBottom: `1px solid ${C.border}` }}>
-                    <td style={{ padding: "10px 8px", color: C.red }}>{VAR_LABELS[cat]}</td>
-                    <td style={{ padding: "10px 8px", textAlign: "right", color: C.red, fontFamily: "monospace", fontWeight: 600 }}>({fmt(catTotals[cat])})</td>
-                    <td />
-                  </tr>
-                ))}
-                <tr>
-                  <td style={{ padding: "10px 8px", color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 13 }}>EOP Total Cash</td>
-                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.text, fontFamily: "monospace", fontWeight: 700 }}>{fmt(eopTotal)}</td>
-                  <td style={{ padding: "10px 8px", color: C.muted, fontSize: 14, textAlign: "right", whiteSpace: "nowrap" }}>
-                    Operating + Treasury {fmt(eopOpTreas)} · Bitcoin ETF {fmt(ibitValue)} · MSTR {fmt(mstrValue)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
           <div style={{ marginTop: 16, fontSize: 14, color: C.muted, fontStyle: "italic" }}>
-            Variable buckets pulled from the Actuals + Projections sheet over the same NTM window as Projected Spend. Payroll, admin, office, and land carry are treated as fixed and excluded here.
-            {latestPortfolioDate && ` Investment values from portfolio snapshot dated ${latestPortfolioDate}.`}
+            Other Variable Expenses = travel, design &amp; branding, due diligence (acquisitions).
           </div>
         </>
       )}
@@ -2565,7 +2504,7 @@ function PortfolioTab() {
 // flags a delta larger than the tolerance. Trivially-tied checks still surface
 // because a future refactor that changes one formula and forgets the other
 // will trip the flag immediately.
-function ChecksTab({ months, landTxns }: { months: MonthData[]; landTxns: LandTxn[] }) {
+function ChecksTab({ months, landTxns, lineItems }: { months: MonthData[]; landTxns: LandTxn[]; lineItems: LineItem[] }) {
   const [ibitValue, setIbitValue] = useState(0);
   const [mstrValue, setMstrValue] = useState(0);
   const [treasuryValue, setTreasuryValue] = useState(0);
@@ -2791,6 +2730,30 @@ function ChecksTab({ months, landTxns }: { months: MonthData[]; landTxns: LandTx
     };
   });
 
+  // ── Check 4: NTM Variable Spend + NTM Fixed Spend = NTM Total Projected ─
+  // Re-derives the three numbers using the exact same logic each tab uses,
+  // so any future formula drift trips this check. Fixed uses the same
+  // MANUAL_FIXED_EXPENSES override the Fixed Expenses tab applies.
+  const overviewData = months.filter((m) => !m.actual).slice(0, 12);
+  const ntmTotalProjected = overviewData.reduce((s, m) => s + m.total, 0);
+  const ntmFixed = overviewData.reduce((s, m) => s + (MANUAL_FIXED_EXPENSES[m.month] ?? m.fixedExpenses), 0);
+  // Variable: sum every whitelisted variable bucket over the NTM window —
+  // mirrors VariableSpendTab exactly.
+  let ntmVariable = 0;
+  const normLbl = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+  for (const li of lineItems) {
+    const cat = classifyVarBucket(normLbl(li.label));
+    if (cat === null || cat === "fixed") continue;
+    for (const m of overviewData) ntmVariable += li.monthly[m.month] || 0;
+  }
+  const check4 = {
+    total: ntmTotalProjected,
+    variable: ntmVariable,
+    fixed: ntmFixed,
+    sum: ntmVariable + ntmFixed,
+    delta: ntmVariable + ntmFixed - ntmTotalProjected,
+  };
+
   const pass = (delta: number) => Math.abs(delta) <= TOL;
 
   const StatusPill = ({ ok }: { ok: boolean }) => (
@@ -2831,10 +2794,13 @@ function ChecksTab({ months, landTxns }: { months: MonthData[]; landTxns: LandTx
 
   const anyLoading = loading;
   const check3Ok = check3.every((c) => pass(c.delta) && c.detailOk);
+  // Wider tolerance for Check 4 — MANUAL_FIXED_EXPENSES rounds to hand-typed
+  // dollar values, so ±$500 across 12 months is acceptable rounding.
+  const check4Ok = Math.abs(check4.delta) <= 500;
   const overallOk =
     pass(check1.delta) &&
     pass(check2Total.delta) && pass(check2Etf.delta) && pass(check2Mstr.delta) &&
-    check3Ok;
+    check3Ok && check4Ok;
 
   const fmtIsoMD = (iso: string): string => {
     const parts = iso.split("-").map(Number);
@@ -2979,6 +2945,21 @@ function ChecksTab({ months, landTxns }: { months: MonthData[]; landTxns: LandTx
                 </div>
               );
             })}
+          </CheckCard>
+
+          {/* Check 4 — NTM Variable + NTM Fixed = NTM Total Projected */}
+          <CheckCard
+            title="4. NTM Variable + NTM Fixed = NTM Total Projected Spend"
+            subtitle="Variable Expenses total and Fixed Expenses total should add up to the NTM Total Projected Spend rolling up all buckets from the Actuals + Projections sheet."
+            ok={check4Ok}
+          >
+            <Row label="NTM Variable Spend" value={fmtFull(check4.variable)} />
+            <Row label="NTM Fixed Spend" value={fmtFull(check4.fixed)} />
+            <Row label="Sum (Variable + Fixed)" value={fmtFull(check4.sum)} />
+            <Row label="NTM Total Projected Spend (sheet)" value={fmtFull(check4.total)} muted />
+            {!check4Ok && (
+              <Row label="Delta" value={fmtFull(check4.delta)} />
+            )}
           </CheckCard>
         </>
       )}
@@ -3244,19 +3225,21 @@ export default function Dashboard() {
     };
     const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
     // Group line items by display bucket, summing monthly values across
-    // NTM. `bucket` (Corp Overhead / Corp Dev / Proj Dev) is taken from the
-    // first contributing row; if a rollup spans sections we keep the first
-    // seen since the display just uses it as a tag.
-    const grouped = new Map<string, { label: string; bucket: string | null; monthly: number[] }>();
+    // NTM. `buckets` collects every Corp Overhead / Corp Dev / Proj Dev
+    // section a contributing row lived under — Legal Fees, for instance,
+    // shows up in both Corp Dev and Proj Dev, so the Top 3 card carries
+    // one chip per section instead of picking just one.
+    const grouped = new Map<string, { label: string; buckets: string[]; monthly: number[] }>();
     for (const li of lineItems) {
       const key = BUCKET_ROLLUP[norm(li.label)];
       if (!key) continue;
       const monthly = overviewData.map(m => li.monthly[m.month] || 0);
       const entry = grouped.get(key);
       if (!entry) {
-        grouped.set(key, { label: key, bucket: li.bucket, monthly });
+        grouped.set(key, { label: key, buckets: li.bucket ? [li.bucket] : [], monthly });
       } else {
         for (let i = 0; i < monthly.length; i++) entry.monthly[i] += monthly[i];
+        if (li.bucket && !entry.buckets.includes(li.bucket)) entry.buckets.push(li.bucket);
       }
     }
     return Array.from(grouped.values())
@@ -3464,9 +3447,9 @@ export default function Dashboard() {
             </div>
             <div style={{ flex: "1 1 340px", minWidth: 340, display: "flex", flexDirection: "column", gap: 16, height: "min(50vh, 600px)", minHeight: 380 }}>
               {([
-                { label: "Corporate Overhead", val: ntmTotals.overhead, plan: planMonths.filter(p => overviewData.some(o => fmtMonth(o.month) === fmtMonth(p.month))).reduce((s, m) => s + m.overhead, 0) || PITCH_DECK_FALLBACK.overhead, color: C.blue, desc: "Payroll, insurance, travel, admin, office, recruiting" },
-                { label: "Corporate Development", val: ntmTotals.corpDev, plan: planMonths.filter(p => overviewData.some(o => fmtMonth(o.month) === fmtMonth(p.month))).reduce((s, m) => s + m.corpDev, 0) || PITCH_DECK_FALLBACK.corpDev, color: C.purple, desc: "Legal (fundraise), design & branding, SEO" },
-                { label: "Project Development", val: ntmTotals.projDev, plan: planMonths.filter(p => overviewData.some(o => fmtMonth(o.month) === fmtMonth(p.month))).reduce((s, m) => s + m.projDev, 0) || PITCH_DECK_FALLBACK.projDev, color: C.green, desc: "Engineering, architect, legal, DD, broker, land carry" },
+                { label: "Corporate Overhead", val: ntmTotals.overhead, plan: planMonths.filter(p => overviewData.some(o => fmtMonth(o.month) === fmtMonth(p.month))).reduce((s, m) => s + m.overhead, 0) || PITCH_DECK_FALLBACK.overhead, color: C.blue },
+                { label: "Corporate Development", val: ntmTotals.corpDev, plan: planMonths.filter(p => overviewData.some(o => fmtMonth(o.month) === fmtMonth(p.month))).reduce((s, m) => s + m.corpDev, 0) || PITCH_DECK_FALLBACK.corpDev, color: C.purple },
+                { label: "Project Development", val: ntmTotals.projDev, plan: planMonths.filter(p => overviewData.some(o => fmtMonth(o.month) === fmtMonth(p.month))).reduce((s, m) => s + m.projDev, 0) || PITCH_DECK_FALLBACK.projDev, color: C.green },
               ]).map((item, i) => {
                 const v = item.val - item.plan;
                 return (
@@ -3477,7 +3460,6 @@ export default function Dashboard() {
                           <div style={{ width: 22, height: 22, borderRadius: 6, background: item.color }} />
                           <span style={{ fontWeight: 700, fontSize: 32 }}>{item.label}</span>
                         </div>
-                        <div style={{ fontSize: 19, color: C.muted, marginTop: 10, marginLeft: 36 }}>{item.desc}</div>
                       </div>
                       <div style={{ textAlign: "right" }}>
                         <div style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 44, color: C.text }}>{fmt(item.val)}</div>
@@ -3532,24 +3514,7 @@ export default function Dashboard() {
                       }}>
                         #{i + 1}
                       </div>
-                      <div style={{ fontSize: 32, fontWeight: 700, color: C.text, marginBottom: 14, paddingRight: 56 }}>{e.label}</div>
-                      {e.bucket && (
-                        <div style={{
-                          alignSelf: "flex-start",
-                          fontSize: 16,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.05em",
-                          background: "rgba(255,255,255,0.05)",
-                          border: `1px solid ${C.border}`,
-                          borderRadius: 6,
-                          padding: "6px 14px",
-                          color: C.muted,
-                          marginBottom: 18,
-                          fontWeight: 600,
-                        }}>
-                          {e.bucket}
-                        </div>
-                      )}
+                      <div style={{ fontSize: 32, fontWeight: 700, color: C.text, marginBottom: 18, paddingRight: 56 }}>{e.label}</div>
                       <div style={{ fontSize: 48, fontWeight: 700, fontFamily: "monospace", color, lineHeight: 1.1 }}>{fmt(e.ntmTotal)}</div>
                       <div style={{ fontSize: 20, color: C.muted, marginTop: 10 }}>{pct.toFixed(1)}% of NTM spend</div>
                       <div style={{ marginTop: 14, marginLeft: -10, marginRight: -10, height: 64, overflow: "visible" }}>
@@ -4042,7 +4007,7 @@ export default function Dashboard() {
 
       {tab === "varspend" && <VariableSpendTab months={months} lineItems={lineItems} />}
 
-      {tab === "checks" && <ChecksTab months={months} landTxns={landTxns} />}
+      {tab === "checks" && <ChecksTab months={months} landTxns={landTxns} lineItems={lineItems} />}
 
       {/* FOOTER */}
       <div style={{ marginTop: 40, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, fontSize: 14, color: C.muted, flexWrap: "wrap" }}>
