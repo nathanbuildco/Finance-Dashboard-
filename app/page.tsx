@@ -3767,6 +3767,14 @@ export default function Dashboard() {
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
                 {next2CN.map((m, idx) => {
                   const txns = cashNeedsLand(m.month).slice().sort((a, b) => a.date.localeCompare(b.date));
+                  // For the calendar-current month, the deposit dates are firm — show
+                  // "Date"; future months are still estimates.
+                  const monthDate = parseMonthLabel(m.month);
+                  const now = new Date();
+                  const isCurrentMonth = monthDate
+                    ? monthDate.getFullYear() === now.getFullYear() && monthDate.getMonth() === now.getMonth()
+                    : false;
+                  const dateHeader = isCurrentMonth ? "Date" : "Estimated Date";
                   if (txns.length === 0) {
                     return (
                       <div key={idx} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "24px 28px", flex: "1 1 380px", minWidth: 380 }}>
@@ -3777,7 +3785,7 @@ export default function Dashboard() {
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 18 }}>
                           <thead>
                             <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                              {["Deal", "Estimated Date", "Type", "Amount"].map((h, i) => (
+                              {["Deal", dateHeader, "Type", "Amount"].map((h, i) => (
                                 <th key={i} style={{ padding: "10px 8px", textAlign: i === 3 ? "right" : "left", color: C.muted, fontWeight: 600, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
                               ))}
                             </tr>
@@ -3805,7 +3813,7 @@ export default function Dashboard() {
                       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 18 }}>
                         <thead>
                           <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                            {["Deal", "Estimated Date", "Type", "Amount"].map((h, i) => (
+                            {["Deal", dateHeader, "Type", "Amount"].map((h, i) => (
                               <th key={i} style={{ padding: "10px 8px", textAlign: i === 3 ? "right" : "left", color: C.muted, fontWeight: 600, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
                             ))}
                           </tr>
