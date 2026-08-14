@@ -923,6 +923,281 @@ function ProjectedSpendTab({ months }: { months: MonthData[] }) {
 }
 
 // ══════════════════════════════════════════════
+// VARIABLE SPEND WATERFALL (NTM)
+// ══════════════════════════════════════════════
+// BOP Total Cash → Architect / Engineering / Legal / Other (variable buckets
+// sorted descending) → EOP Total Cash. Numbers come from the Actuals +
+// Projections sheet's line items over the same NTM window Projected Spend uses.
+// Fixed buckets (payroll, admin, office, land carry) are excluded — this is
+// the mirror of Fixed Expenses for the non-fixed side of the P&L.
+const VAR_BUCKET_MEMBERS: Record<"architect" | "engineering" | "legal" | "other", string[]> = {
+  architect: ["architect fees"],
+  engineering: ["engineering"],
+  legal: ["legal", "legal (fundraise, company set up)"],
+  other: ["travel", "design and branding", "due diligence - acquisitions", "broker fees", "placeholder"],
+};
+const VAR_FIXED_BUCKETS = new Set(["payroll", "admin", "office", "land carry"]);
+type VarCategory = "architect" | "engineering" | "legal" | "other";
+const VAR_LABELS: Record<VarCategory, string> = {
+  architect: "Architect Fees",
+  engineering: "Engineering Fees",
+  legal: "Legal Fees",
+  other: "Other Variable Expenses",
+};
+function classifyVarBucket(labelNorm: string): VarCategory | "fixed" | null {
+  if (VAR_FIXED_BUCKETS.has(labelNorm)) return "fixed";
+  for (const cat of Object.keys(VAR_BUCKET_MEMBERS) as VarCategory[]) {
+    if (VAR_BUCKET_MEMBERS[cat].includes(labelNorm)) return cat;
+  }
+  return null; // outside the whitelist — ignore (row-level sub-vendors, headers, etc.)
+}
+
+function VariableSpendTab({ months, lineItems }: { months: MonthData[]; lineItems: LineItem[] }) {
+  const [operatingCash, setOperatingCash] = useState(0);
+  const [ibitValue, setIbitValue] = useState(0);
+  const [mstrValue, setMstrValue] = useState(0);
+  const [treasuryValue, setTreasuryValue] = useState(0);
+  const [latestPortfolioDate, setLatestPortfolioDate] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const [opRes, snapRes] = await Promise.all([
+          fetch(OPERATING_CASH_CSV_URL),
+          fetch("/api/portfolio/snapshots", { cache: "no-store" }),
+        ]);
+
+        if (opRes.ok) {
+          const csv = await opRes.text();
+          const opRows = parseCSV(csv);
+          const rawF11 = opRows[10]?.[5] ?? "";
+          setOperatingCash(toNumWithSuffix(rawF11));
+        }
+
+        if (snapRes.ok) {
+          const data = await snapRes.json();
+          const snaps: PortfolioSnapshot[] = data.snapshots || [];
+          const dates = Array.from(new Set(snaps.map((s) => s.statementDate))).sort();
+          const latest = dates[dates.length - 1] || "";
+          setLatestPortfolioDate(latest);
+          const latestSnaps = snaps.filter((s) => s.statementDate === latest);
+          const sumTickers = (...ts: string[]) => {
+            const set = new Set(ts.map((t) => t.toUpperCase()));
+            return latestSnaps.filter((s) => set.has(s.ticker.toUpperCase())).reduce((sum, s) => sum + s.marketValue, 0);
+          };
+          setIbitValue(sumTickers("IBIT", "MSBT"));
+          setMstrValue(sumTickers("MSTR"));
+          setTreasuryValue(sumTickers("TREASURY"));
+        }
+        setErr(null);
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  // ── NTM window (same 12-month slice Projected Spend uses) ─────────────
+  const ntm = useMemo(() => months.filter((m) => !m.actual).slice(0, 12), [months]);
+  const ntmMonthSet = useMemo(() => new Set(ntm.map((m) => m.month)), [ntm]);
+
+  // ── Per-category NTM totals + breakdown of "Other" sub-buckets ────────
+  const { catTotals, otherBreakdown } = useMemo(() => {
+    const totals: Record<VarCategory, number> = { architect: 0, engineering: 0, legal: 0, other: 0 };
+    const other: { label: string; total: number }[] = [];
+    const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+    // Group by categorization; sum monthly across NTM. Deduplicate by canonical
+    // label so a repeated bucket row (e.g. "Legal" appearing under two sections)
+    // rolls into a single number for that category.
+    const otherLabelSums = new Map<string, number>();
+    for (const li of lineItems) {
+      const cat = classifyVarBucket(norm(li.label));
+      if (cat === null || cat === "fixed") continue;
+      let ntmTotal = 0;
+      for (const m of ntm) ntmTotal += li.monthly[m.month] || 0;
+      if (ntmTotal <= 0) continue;
+      totals[cat] += ntmTotal;
+      if (cat === "other") {
+        const prev = otherLabelSums.get(li.label) || 0;
+        otherLabelSums.set(li.label, prev + ntmTotal);
+      }
+    }
+    for (const [label, total] of otherLabelSums) other.push({ label, total });
+    other.sort((a, b) => b.total - a.total);
+    return { catTotals: totals, otherBreakdown: other };
+    // ntmMonthSet unused — using ntm directly for month lookup
+  }, [lineItems, ntm]);
+
+  const variableTotal = catTotals.architect + catTotals.engineering + catTotals.legal + catTotals.other;
+
+  // Sort categories descending for waterfall order. Ties broken by fixed key
+  // ordering (architect, engineering, legal, other) for stability.
+  const catOrder = (["architect", "engineering", "legal", "other"] as VarCategory[])
+    .slice()
+    .sort((a, b) => catTotals[b] - catTotals[a]);
+
+  const bopOpTreas = operatingCash + treasuryValue;
+  const bopTotal = bopOpTreas + ibitValue + mstrValue;
+  const eopTotal = bopTotal - variableTotal;
+  const eopOpTreas = bopOpTreas - variableTotal;
+
+  // Running cumulative for the floating spend bar bases + dashed connectors.
+  const cumulative: number[] = [bopTotal];
+  for (const cat of catOrder) cumulative.push(cumulative[cumulative.length - 1] - catTotals[cat]);
+  // cumulative = [bopTotal, afterCat1, afterCat2, afterCat3, afterCat4] where the last === eopTotal
+
+  const chartData: SpendBarRow[] = [
+    { name: "BOP Total Cash", base: 0, operating: operatingCash, treasury: treasuryValue, opTreas: bopOpTreas, ibit: ibitValue, mstr: mstrValue, spend: 0, total: bopTotal },
+    ...catOrder.map((cat, i) => ({
+      name: VAR_LABELS[cat],
+      base: cumulative[i + 1],
+      operating: 0, treasury: 0, opTreas: 0, ibit: 0, mstr: 0,
+      spend: catTotals[cat],
+      total: -catTotals[cat],
+    })),
+    { name: "EOP Total Cash", base: 0, operating: eopOpTreas - treasuryValue, treasury: treasuryValue, opTreas: eopOpTreas, ibit: ibitValue, mstr: mstrValue, spend: 0, total: eopTotal },
+  ];
+
+  const connectorJoins = cumulative.slice(0, -1);
+  const ntmRange = ntm.length === 12 ? `${ntm[0].month} – ${ntm[11].month}` : "";
+
+  return (
+    <>
+      <Section>Variable Expenses — Next 12 Months</Section>
+
+      {loading && <div style={{ color: C.muted, marginTop: 24 }}>Loading…</div>}
+      {err && <div style={{ color: C.red, marginTop: 24 }}>{err}</div>}
+
+      {!loading && (
+        <>
+          <div style={{ display: "flex", gap: 14, marginBottom: 18, flexWrap: "wrap" }}>
+            <KPI label="BOP Total" value={fmt(bopTotal)} sub={ntmRange ? `Start: ${ntm[0]?.month ?? ""}` : undefined} />
+            <KPI label="NTM Variable Spend" value={fmt(variableTotal)} color={C.red} />
+            <KPI label="EOP Total" value={fmt(eopTotal)} sub={ntmRange ? `End: ${ntm[11]?.month ?? ""}` : undefined} />
+          </div>
+
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "stretch" }}>
+            {/* Waterfall chart */}
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 16px 8px", height: "min(60vh, 720px)", minHeight: 460, flex: "1 1 640px", minWidth: 520 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 24, right: 30, left: 10, bottom: 20 }}>
+                  <XAxis dataKey="name" tick={{ fill: C.text, fontSize: 15 }} axisLine={{ stroke: "#1e2430" }} interval={0} angle={-12} textAnchor="end" height={70} />
+                  <YAxis tick={{ fill: C.muted, fontSize: 15, fontFamily: "monospace" }} tickFormatter={(v: number) => fmt(v)} axisLine={false} />
+                  <Tooltip content={<SpendTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+                  <Legend
+                    wrapperStyle={{ fontSize: 16 }}
+                    content={() => (
+                      <ul style={{ display: "flex", justifyContent: "center", gap: 24, listStyle: "none", padding: 0, margin: "12px 0 0", flexWrap: "wrap" }}>
+                        {[
+                          { label: "Operating + Treasury", color: SPEND_NAVY },
+                          { label: "Bitcoin ETF", color: C.orange },
+                          { label: "MSTR", color: SPEND_MSTR_GRAY },
+                          { label: "Variable Spending", color: C.red },
+                        ].map((k, i) => (
+                          <li key={i} style={{ display: "flex", alignItems: "center", gap: 10, color: k.color, fontSize: 15 }}>
+                            <span style={{ display: "inline-block", width: 14, height: 14, background: k.color, borderRadius: 3 }} />
+                            {k.label}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  />
+                  <Bar dataKey="base" stackId="a" fill="transparent" isAnimationActive={false} />
+                  <Bar dataKey="opTreas" stackId="a" fill={SPEND_NAVY} />
+                  <Bar dataKey="ibit" stackId="a" fill={C.orange} />
+                  <Bar dataKey="mstr" stackId="a" fill={SPEND_MSTR_GRAY} radius={[4, 4, 0, 0]}>
+                    <LabelList dataKey="total" position="top" formatter={(v) => { const n = Number(v); return n > 0 ? fmt(n) : ""; }} fill={C.text} fontSize={15} fontWeight={700} />
+                  </Bar>
+                  <Bar dataKey="spend" stackId="a" fill={C.red} radius={[4, 4, 0, 0]}>
+                    <LabelList dataKey="total" position="top" formatter={(v) => { const n = Number(v); return n < 0 ? `(${fmt(Math.abs(n))})` : ""; }} fill={C.red} fontSize={15} fontWeight={700} />
+                  </Bar>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  <Customized component={(p: any) => {
+                    const xAxis = p?.xAxisMap ? (Object.values(p.xAxisMap)[0] as any) : null;
+                    const yAxis = p?.yAxisMap ? (Object.values(p.yAxisMap)[0] as any) : null;
+                    if (!xAxis?.scale || !yAxis?.scale) return null;
+                    const bw = xAxis.scale.bandwidth?.() ?? 0;
+                    return (
+                      <g>
+                        {connectorJoins.map((y, i) => {
+                          const xFromBase = xAxis.scale(chartData[i].name);
+                          const xToBase = xAxis.scale(chartData[i + 1].name);
+                          if (xFromBase === undefined || xToBase === undefined) return null;
+                          const yPx = yAxis.scale(y);
+                          return (
+                            <line key={i} x1={xFromBase + bw * 0.85} y1={yPx} x2={xToBase + bw * 0.15} y2={yPx} stroke={C.muted} strokeWidth={1.5} strokeDasharray="6 4" />
+                          );
+                        })}
+                      </g>
+                    );
+                  }} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Other Variable Expenses breakdown card */}
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", flex: "1 1 300px", minWidth: 280, maxWidth: 380, alignSelf: "stretch" }}>
+              <div style={{ color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Other Variable Expenses</div>
+              <div style={{ fontSize: 28, fontFamily: "monospace", fontWeight: 700, color: C.text, marginBottom: 14 }}>{fmt(catTotals.other)}</div>
+              {otherBreakdown.length === 0 ? (
+                <div style={{ color: C.muted, fontStyle: "italic", fontSize: 14 }}>No line items projected in NTM.</div>
+              ) : (
+                <div>
+                  {otherBreakdown.map((row, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderTop: i === 0 ? undefined : `1px solid ${C.border}` }}>
+                      <span style={{ color: C.text, fontSize: 14, textTransform: "capitalize" }}>{row.label}</span>
+                      <span style={{ color: C.text, fontFamily: "monospace", fontWeight: 600, fontSize: 14 }}>{fmt(row.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Breakdown table */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", marginTop: 20 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 16 }}>
+              <tbody>
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <td style={{ padding: "10px 8px", color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 13 }}>BOP Total Cash</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.text, fontFamily: "monospace", fontWeight: 700 }}>{fmt(bopTotal)}</td>
+                  <td style={{ padding: "10px 8px", color: C.muted, fontSize: 14, textAlign: "right", whiteSpace: "nowrap" }}>
+                    Operating {fmt(operatingCash)} · Treasury {fmt(treasuryValue)} · Bitcoin ETF {fmt(ibitValue)} · MSTR {fmt(mstrValue)}
+                  </td>
+                </tr>
+                {catOrder.map((cat) => (
+                  <tr key={cat} style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <td style={{ padding: "10px 8px", color: C.red }}>{VAR_LABELS[cat]}</td>
+                    <td style={{ padding: "10px 8px", textAlign: "right", color: C.red, fontFamily: "monospace", fontWeight: 600 }}>({fmt(catTotals[cat])})</td>
+                    <td />
+                  </tr>
+                ))}
+                <tr>
+                  <td style={{ padding: "10px 8px", color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 13 }}>EOP Total Cash</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", color: C.text, fontFamily: "monospace", fontWeight: 700 }}>{fmt(eopTotal)}</td>
+                  <td style={{ padding: "10px 8px", color: C.muted, fontSize: 14, textAlign: "right", whiteSpace: "nowrap" }}>
+                    Operating + Treasury {fmt(eopOpTreas)} · Bitcoin ETF {fmt(ibitValue)} · MSTR {fmt(mstrValue)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ marginTop: 16, fontSize: 14, color: C.muted, fontStyle: "italic" }}>
+            Variable buckets pulled from the Actuals + Projections sheet over the same NTM window as Projected Spend. Payroll, admin, office, and land carry are treated as fixed and excluded here.
+            {latestPortfolioDate && ` Investment values from portfolio snapshot dated ${latestPortfolioDate}.`}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+// ══════════════════════════════════════════════
 // ACQUISITIONS CLOSED TAB
 // ══════════════════════════════════════════════
 interface ClosedAcquisitionRow {
@@ -2944,31 +3219,48 @@ export default function Dashboard() {
   // Whitelist of the actual cost-bucket categories from the Actuals + Projections sheet.
   // Only these labels are ranked; the Top 3 are the three highest-NTM entries.
   // Match is case-insensitive with normalized whitespace.
+  //
+  // Rollup: some categories are entered as two rows in the sheet (e.g. "Legal"
+  // and "Legal (Fundraise, Company Set Up)") — those get combined into a single
+  // display bucket so they compete fairly for a Top 3 slot instead of both
+  // getting undercounted.
   const topExpenses = useMemo(() => {
     if (overviewData.length === 0) return [];
-    const BUCKETS = new Set([
-      "payroll",
-      "travel",
-      "admin",
-      "office",
-      "legal (fundraise, company set up)",
-      "design and branding",
-      "engineering",
-      "architect fees",
-      "due diligence - acquisitions",
-      "broker fees",
-      "legal",
-      "placeholder",
-      "land carry",
-    ]);
+    // Map from sheet label → display label used for grouping.
+    const BUCKET_ROLLUP: Record<string, string> = {
+      "payroll": "Payroll",
+      "travel": "Travel",
+      "admin": "Admin",
+      "office": "Office",
+      "legal (fundraise, company set up)": "Legal Fees",
+      "legal": "Legal Fees",
+      "design and branding": "Design and Branding",
+      "engineering": "Engineering",
+      "architect fees": "Architect Fees",
+      "due diligence - acquisitions": "Due Diligence - Acquisitions",
+      "broker fees": "Broker Fees",
+      "placeholder": "Placeholder",
+      "land carry": "Land Carry",
+    };
     const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
-    return lineItems
-      .filter(li => BUCKETS.has(norm(li.label)))
-      .map(li => {
-        const monthly = overviewData.map(m => li.monthly[m.month] || 0);
-        const ntmTotal = monthly.reduce((s, v) => s + v, 0);
-        return { label: li.label, bucket: li.bucket, ntmTotal, monthly };
-      })
+    // Group line items by display bucket, summing monthly values across
+    // NTM. `bucket` (Corp Overhead / Corp Dev / Proj Dev) is taken from the
+    // first contributing row; if a rollup spans sections we keep the first
+    // seen since the display just uses it as a tag.
+    const grouped = new Map<string, { label: string; bucket: string | null; monthly: number[] }>();
+    for (const li of lineItems) {
+      const key = BUCKET_ROLLUP[norm(li.label)];
+      if (!key) continue;
+      const monthly = overviewData.map(m => li.monthly[m.month] || 0);
+      const entry = grouped.get(key);
+      if (!entry) {
+        grouped.set(key, { label: key, bucket: li.bucket, monthly });
+      } else {
+        for (let i = 0; i < monthly.length; i++) entry.monthly[i] += monthly[i];
+      }
+    }
+    return Array.from(grouped.values())
+      .map(g => ({ ...g, ntmTotal: g.monthly.reduce((s, v) => s + v, 0) }))
       .filter(v => v.ntmTotal > 0)
       .sort((a, b) => b.ntmTotal - a.ntmTotal)
       .slice(0, 3);
@@ -3021,6 +3313,7 @@ export default function Dashboard() {
     { id: "variance", label: "ITD vs Plan" },
     { id: "cashposition", label: "Total Cash Position" },
     { id: "projspend", label: "Projected Spend" },
+    { id: "varspend", label: "Variable Expenses" },
     { id: "costs", label: "Cost Breakdown" },
     { id: "headcount", label: "Headcount" },
     { id: "payroll", label: "Payroll" },
@@ -3746,6 +4039,8 @@ export default function Dashboard() {
       {tab === "cashposition" && <TotalCashPositionTab />}
 
       {tab === "projspend" && <ProjectedSpendTab months={months} />}
+
+      {tab === "varspend" && <VariableSpendTab months={months} lineItems={lineItems} />}
 
       {tab === "checks" && <ChecksTab months={months} landTxns={landTxns} />}
 
