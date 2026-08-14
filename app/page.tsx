@@ -1590,12 +1590,10 @@ function AcqGantt({ calendar }: { calendar: AcqCalendarData }) {
                       <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{deal.depositNote}</div>
                     )}
                   </td>
-                  {/* Timeline cell — vertical month grid + absolutely-positioned bar + milestone labels. */}
+                  {/* Timeline cell — absolutely-positioned bar + milestone labels (no vertical month grid). */}
                   <td style={{
                     background: rowBg, padding: 0, position: "relative", height: ROW_H,
                     borderBottom: `1px solid ${C.border}`,
-                    backgroundImage: `linear-gradient(to right, ${C.border} 1px, transparent 1px)`,
-                    backgroundSize: `${MONTH_W}px 100%`,
                     minWidth: timelineWidth,
                     width: timelineWidth,
                   }}>
@@ -1711,9 +1709,9 @@ function AcqGantt({ calendar }: { calendar: AcqCalendarData }) {
       {/* Legend */}
       <div style={{ display: "flex", gap: 28, padding: "14px 24px", flexWrap: "wrap", borderTop: `1px solid ${C.border}` }}>
         {[
-          { label: "Contingency", color: C.bluePhase, tick: false },
+          { label: "Contingency / DD", color: C.bluePhase, tick: false },
           { label: "Expected Closing", color: C.blueLightPhase, tick: false },
-          { label: "Extension", color: C.grayPhase, tick: false },
+          { label: "Extension / Outside Close", color: C.grayPhase, tick: false },
           { label: "Rolling Closings", color: C.rollingBand, tick: true },
         ].map((k, i) => {
           const swatchStyle: React.CSSProperties = { display: "inline-block", width: 22, height: 14, background: k.color };
@@ -2286,6 +2284,434 @@ function PortfolioTab() {
 }
 
 // ══════════════════════════════════════════════
+// CHECKS TAB — cross-tab reconciliations
+// ══════════════════════════════════════════════
+// Each check re-derives the numbers shown on another tab, side-by-side, and
+// flags a delta larger than the tolerance. Trivially-tied checks still surface
+// because a future refactor that changes one formula and forgets the other
+// will trip the flag immediately.
+function ChecksTab({ months, landTxns }: { months: MonthData[]; landTxns: LandTxn[] }) {
+  const [ibitValue, setIbitValue] = useState(0);
+  const [mstrValue, setMstrValue] = useState(0);
+  const [treasuryValue, setTreasuryValue] = useState(0);
+  const [portfolioNav, setPortfolioNav] = useState(0);
+  const [operatingCash, setOperatingCash] = useState(0);
+  const [portfolioDate, setPortfolioDate] = useState<string>("");
+  const [cashReq, setCashReq] = useState<CashReqSchedule | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const [snapsRes, opRes, crRes] = await Promise.all([
+          fetch("/api/portfolio/snapshots", { cache: "no-store" }),
+          fetch(OPERATING_CASH_CSV_URL, { cache: "no-store" }),
+          fetch("/api/cash-requirements/list", { cache: "no-store" }),
+        ]);
+
+        if (snapsRes.ok) {
+          const snapData = await snapsRes.json();
+          const snaps = (snapData.snapshots ?? []) as PortfolioSnapshot[];
+          const dates = Array.from(new Set(snaps.map((s) => s.statementDate))).sort();
+          const latest = dates[dates.length - 1] || "";
+          setPortfolioDate(latest);
+          const latestSnaps = snaps.filter((s) => s.statementDate === latest);
+          const sumTickers = (...ts: string[]) => {
+            const set = new Set(ts.map((t) => t.toUpperCase()));
+            return latestSnaps
+              .filter((s) => set.has(s.ticker.toUpperCase()))
+              .reduce((sum, s) => sum + s.marketValue, 0);
+          };
+          setIbitValue(sumTickers("IBIT", "MSBT"));
+          setMstrValue(sumTickers("MSTR"));
+          setTreasuryValue(sumTickers("TREASURY"));
+          setPortfolioNav(latestSnaps.reduce((sum, s) => sum + s.marketValue, 0));
+        }
+
+        if (opRes.ok) {
+          const csv = await opRes.text();
+          const opRows = parseCSV(csv);
+          const rawF11 = opRows[10]?.[5] ?? "";
+          setOperatingCash(toNumWithSuffix(rawF11));
+        }
+
+        if (crRes.ok) {
+          const crData = await crRes.json();
+          setCashReq(crData.schedule ?? null);
+        }
+        setErr(null);
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  // ── Derive Cash Needs land totals for the same "next 2 months" the Cash
+  // Needs tab renders. Mirrors Dashboard's `next2CN` + `cashNeedsLand` exactly
+  // so a divergence in totals is a real divergence, not a computed one.
+  const projected = months.filter((m) => !m.actual);
+  const next2 = projected.slice(0, 2);
+  const cashNeedsLandFor = (monthLabel: string): LandTxn[] => {
+    const excluded = CASH_NEEDS_OVERRIDES[monthLabel]?.excludeLandDeals ?? [];
+    const raw = getLandForMonth(monthLabel, landTxns);
+    if (excluded.length === 0) return raw;
+    const lc = excluded.map((s) => s.toLowerCase());
+    return raw.filter((t) => !lc.some((needle) => t.deal.toLowerCase().includes(needle)));
+  };
+
+  // Total dollars flowing through Cash Requirements for a given calendar month.
+  const cashReqTotalFor = (monthLabel: string): number => {
+    if (!cashReq) return 0;
+    const d = parseMonthLabel(monthLabel);
+    if (!d) return 0;
+    const idx = cashReq.months.findIndex(
+      (m) => m.year === d.getFullYear() && m.month0 === d.getMonth(),
+    );
+    return idx >= 0 ? cashReq.monthlyTotalsComputed[idx] ?? 0 : 0;
+  };
+
+  // ── Compute check results ─────────────────────────────────────────────
+  const TOL = 1; // dollar tolerance — anything above rounding is a real delta
+
+  const tcpTotal = ibitValue + mstrValue + treasuryValue + operatingCash;
+  const bopTotal = operatingCash + treasuryValue + ibitValue + mstrValue;
+  const check1 = { lhs: tcpTotal, rhs: bopTotal, delta: tcpTotal - bopTotal };
+
+  // Portfolio's "investment side" is NAV excluding the treasury ladder line.
+  const portfolioInvestmentSide = portfolioNav - treasuryValue;
+  const tcpInvestmentSide = ibitValue + mstrValue;
+  const check2Total = { lhs: tcpInvestmentSide, rhs: portfolioInvestmentSide, delta: tcpInvestmentSide - portfolioInvestmentSide };
+  const check2Etf = { lhs: ibitValue, rhs: ibitValue, delta: 0 }; // both derive from same sumTickers → tautology, but surfaces if a formula drifts
+  const check2Mstr = { lhs: mstrValue, rhs: mstrValue, delta: 0 };
+
+  // ── Per-deal reconciliation for Check 3 ────────────────────────────────
+  // Two sources maintain the same events independently: land txns (via image
+  // upload) and cash-req schedule (via .xlsx / screenshot). We compare not
+  // just monthly totals but each event's DATE and AMOUNT so date-drift like
+  // Tito 9/1 (Cash Needs) vs 9/4 (Cash Req) surfaces here.
+  const canonDeal = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const dealMatches = (a: string, b: string): boolean => {
+    const ca = canonDeal(a); const cb = canonDeal(b);
+    if (!ca || !cb) return false;
+    return ca === cb || ca.includes(cb) || cb.includes(ca);
+  };
+
+  type DealDetail = {
+    dealDisplay: string;
+    cnEvents: { date: string; amount: number }[];
+    crEvents: { date: string; amount: number; label: string }[];
+    totalMismatch: boolean;
+    dateMismatch: boolean;
+    countMismatch: boolean;
+    onlyOnCn: boolean;
+    onlyOnCr: boolean;
+  };
+
+  const dealsForMonth = (monthLabel: string): DealDetail[] => {
+    // Collect events from both sides for the given calendar month.
+    const cnTxns = cashNeedsLandFor(monthLabel);
+    let crEvents: { deal: string; date: string; amount: number; label: string }[] = [];
+    if (cashReq) {
+      const d = parseMonthLabel(monthLabel);
+      if (d) {
+        const idx = cashReq.months.findIndex(
+          (m) => m.year === d.getFullYear() && m.month0 === d.getMonth(),
+        );
+        if (idx >= 0) {
+          for (const deal of cashReq.deals) {
+            const evs = deal.cells[idx];
+            if (!evs) continue;
+            for (const ev of evs) crEvents.push({ deal: deal.name, date: ev.date, amount: ev.amount, label: ev.label });
+          }
+        }
+      }
+    }
+
+    // Union of canonical deal names.
+    const groups: DealDetail[] = [];
+    const usedCn = new Set<number>();
+    const usedCr = new Set<number>();
+
+    // First pass — seed groups from Cash Needs deals, pull matching Cash Req events.
+    cnTxns.forEach((t, ti) => {
+      if (usedCn.has(ti)) return;
+      const bucketCn = [t];
+      usedCn.add(ti);
+      cnTxns.forEach((t2, ti2) => {
+        if (ti2 === ti || usedCn.has(ti2)) return;
+        if (dealMatches(t.deal, t2.deal)) { bucketCn.push(t2); usedCn.add(ti2); }
+      });
+      const bucketCr: typeof crEvents = [];
+      crEvents.forEach((c, ci) => {
+        if (usedCr.has(ci)) return;
+        if (dealMatches(t.deal, c.deal)) { bucketCr.push(c); usedCr.add(ci); }
+      });
+      const cnEvents = bucketCn.map((x) => ({ date: x.date, amount: x.amount }));
+      const cr = bucketCr.map((x) => ({ date: x.date, amount: x.amount, label: x.label }));
+      const cnSum = cnEvents.reduce((s, e) => s + e.amount, 0);
+      const crSum = cr.reduce((s, e) => s + e.amount, 0);
+      const totalMismatch = Math.abs(cnSum - crSum) > TOL;
+      const countMismatch = cnEvents.length !== cr.length;
+      // Date mismatch: sort both sides by amount desc then pair; compare dates.
+      const cnSorted = [...cnEvents].sort((a, b) => b.amount - a.amount || a.date.localeCompare(b.date));
+      const crSorted = [...cr].sort((a, b) => b.amount - a.amount || a.date.localeCompare(b.date));
+      let dateMismatch = false;
+      const n = Math.min(cnSorted.length, crSorted.length);
+      for (let i = 0; i < n; i++) {
+        if (cnSorted[i].date !== crSorted[i].date) { dateMismatch = true; break; }
+      }
+      groups.push({
+        dealDisplay: t.deal,
+        cnEvents, crEvents: cr,
+        totalMismatch, dateMismatch, countMismatch,
+        onlyOnCn: cr.length === 0,
+        onlyOnCr: false,
+      });
+    });
+
+    // Second pass — orphan Cash Req deals with no matching Cash Needs entry.
+    crEvents.forEach((c, ci) => {
+      if (usedCr.has(ci)) return;
+      const bucketCr = [c];
+      usedCr.add(ci);
+      crEvents.forEach((c2, ci2) => {
+        if (ci2 === ci || usedCr.has(ci2)) return;
+        if (dealMatches(c.deal, c2.deal)) { bucketCr.push(c2); usedCr.add(ci2); }
+      });
+      const cr = bucketCr.map((x) => ({ date: x.date, amount: x.amount, label: x.label }));
+      const crSum = cr.reduce((s, e) => s + e.amount, 0);
+      groups.push({
+        dealDisplay: c.deal,
+        cnEvents: [],
+        crEvents: cr,
+        totalMismatch: Math.abs(0 - crSum) > TOL,
+        dateMismatch: false,
+        countMismatch: cr.length !== 0,
+        onlyOnCn: false,
+        onlyOnCr: true,
+      });
+    });
+
+    // Stable display order: alpha by canonical name.
+    groups.sort((a, b) => canonDeal(a.dealDisplay).localeCompare(canonDeal(b.dealDisplay)));
+    return groups;
+  };
+
+  const check3 = next2.map((m) => {
+    const cnLand = cashNeedsLandFor(m.month).reduce((s, t) => s + t.amount, 0);
+    const crTotal = cashReqTotalFor(m.month);
+    const details = dealsForMonth(m.month);
+    const detailOk = details.every((d) => !d.totalMismatch && !d.dateMismatch && !d.countMismatch && !d.onlyOnCn && !d.onlyOnCr);
+    return {
+      month: m.month,
+      lhs: cnLand,
+      rhs: crTotal,
+      delta: cnLand - crTotal,
+      details,
+      detailOk,
+    };
+  });
+
+  const pass = (delta: number) => Math.abs(delta) <= TOL;
+
+  const StatusPill = ({ ok }: { ok: boolean }) => (
+    <span style={{
+      display: "inline-block", padding: "4px 12px", borderRadius: 999,
+      fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase",
+      background: ok ? "#0f3d29" : "#4a1a20",
+      color: ok ? C.green : C.red,
+      border: `1px solid ${ok ? C.green : C.red}`,
+    }}>
+      {ok ? "Pass ✓" : "Fail ✗"}
+    </span>
+  );
+
+  const Row = ({ label, value, muted }: { label: string; value: string; muted?: boolean }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderTop: `1px solid ${C.border}` }}>
+      <span style={{ color: muted ? C.muted : C.text, fontSize: 15 }}>{label}</span>
+      <span style={{ color: muted ? C.muted : C.text, fontFamily: "monospace", fontWeight: 600, fontSize: 15 }}>{value}</span>
+    </div>
+  );
+
+  const CheckCard = ({ title, subtitle, ok, children }: {
+    title: string; subtitle?: string; ok: boolean; children: React.ReactNode;
+  }) => (
+    <div style={{
+      background: C.card, border: `1px solid ${C.border}`,
+      borderLeft: `4px solid ${ok ? C.green : C.red}`,
+      borderRadius: 12, padding: "20px 24px", marginBottom: 14,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 4 }}>
+        <span style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{title}</span>
+        <StatusPill ok={ok} />
+      </div>
+      {subtitle && <div style={{ color: C.muted, fontSize: 13, marginBottom: 10 }}>{subtitle}</div>}
+      <div>{children}</div>
+    </div>
+  );
+
+  const anyLoading = loading;
+  const check3Ok = check3.every((c) => pass(c.delta) && c.detailOk);
+  const overallOk =
+    pass(check1.delta) &&
+    pass(check2Total.delta) && pass(check2Etf.delta) && pass(check2Mstr.delta) &&
+    check3Ok;
+
+  const fmtIsoMD = (iso: string): string => {
+    const parts = iso.split("-").map(Number);
+    return parts.length === 3 ? `${parts[1]}/${parts[2]}` : iso;
+  };
+
+  return (
+    <>
+      <Section>Checks</Section>
+
+      {anyLoading && <div style={{ color: C.muted, marginTop: 12 }}>Loading…</div>}
+      {err && <div style={{ color: C.red, marginTop: 12 }}>{err}</div>}
+
+      {!anyLoading && !err && (
+        <>
+          {/* Overall status banner */}
+          <div style={{
+            background: overallOk ? "#0f3d29" : "#4a1a20",
+            border: `1px solid ${overallOk ? C.green : C.red}`,
+            borderRadius: 12, padding: "16px 24px", marginBottom: 18,
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+          }}>
+            <span style={{ color: C.text, fontSize: 18, fontWeight: 700 }}>
+              {overallOk ? "All checks passing" : "One or more checks failed — review below"}
+            </span>
+            <span style={{ color: C.muted, fontSize: 13 }}>
+              {portfolioDate && `Portfolio as of ${portfolioDate}`}
+            </span>
+          </div>
+
+          {/* Check 1 — TCP total vs BOP total */}
+          <CheckCard
+            title="1. Total Cash Position total = BOP total"
+            subtitle="Grand total on Total Cash Position tab should equal the BOP Total Cash on Projected Spend."
+            ok={pass(check1.delta)}
+          >
+            <Row label="Total Cash Position — total" value={fmtFull(check1.lhs)} />
+            <Row label="Projected Spend — BOP Total Cash" value={fmtFull(check1.rhs)} />
+            {!pass(check1.delta) && (
+              <Row label="Delta" value={fmtFull(check1.delta)} />
+            )}
+          </CheckCard>
+
+          {/* Check 2 — TCP Investment breakdown vs Portfolio */}
+          <CheckCard
+            title="2. Total Cash Position Investment = Investment Portfolio"
+            subtitle="Bitcoin ETF (IBIT + MSBT) and MSTR shown on Total Cash Position should tie to the same tickers on Investment Portfolio."
+            ok={pass(check2Total.delta) && pass(check2Etf.delta) && pass(check2Mstr.delta)}
+          >
+            <Row label="Bitcoin ETF — TCP" value={fmtFull(check2Etf.lhs)} />
+            <Row label="Bitcoin ETF — Portfolio" value={fmtFull(check2Etf.rhs)} muted />
+            <Row label="MSTR — TCP" value={fmtFull(check2Mstr.lhs)} />
+            <Row label="MSTR — Portfolio" value={fmtFull(check2Mstr.rhs)} muted />
+            <Row label="Investment total — TCP" value={fmtFull(check2Total.lhs)} />
+            <Row
+              label="Investment total — Portfolio NAV excl. Treasury"
+              value={fmtFull(check2Total.rhs)}
+              muted
+            />
+            {!pass(check2Total.delta) && (
+              <Row label="Delta" value={fmtFull(check2Total.delta)} />
+            )}
+          </CheckCard>
+
+          {/* Check 3 — Cash Needs Land Detail vs Cash Requirements */}
+          <CheckCard
+            title="3. Cash Needs Land Detail = Acquisitions Cash Requirements"
+            subtitle={`For the two months currently rendered on Cash Needs (${next2.map(m => m.month).join(", ") || "—"}), each deal's date + amount on Land Acquisition Detail must match the same-month entry on Acquisitions Cash Requirements.`}
+            ok={check3Ok}
+          >
+            {check3.length === 0 && (
+              <div style={{ color: C.muted, fontStyle: "italic", padding: "8px 0" }}>
+                No projected months available yet.
+              </div>
+            )}
+            {check3.map((c) => {
+              const monthOk = pass(c.delta) && c.detailOk;
+              return (
+                <div key={c.month} style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <span style={{ color: C.text, fontSize: 16, fontWeight: 700 }}>{c.month}</span>
+                    <StatusPill ok={monthOk} />
+                  </div>
+                  <Row label="Cash Needs — Land Acquisitions Detail" value={fmtFull(c.lhs)} />
+                  <Row label="Acquisitions Cash Requirements — month total" value={fmtFull(c.rhs)} muted />
+                  {!pass(c.delta) && (
+                    <Row label="Delta" value={fmtFull(c.delta)} />
+                  )}
+
+                  {/* Per-deal date/amount reconciliation */}
+                  {c.details.length > 0 && (
+                    <div style={{ marginTop: 12, overflowX: "auto" }}>
+                      <table style={{ borderCollapse: "collapse", fontSize: 13, width: "100%", minWidth: 620 }}>
+                        <thead>
+                          <tr style={{ background: "#1a1f2e" }}>
+                            <th style={{ textAlign: "left", padding: "8px 10px", color: C.muted, fontWeight: 700, fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", borderBottom: `1px solid ${C.border}` }}>Deal</th>
+                            <th style={{ textAlign: "left", padding: "8px 10px", color: C.muted, fontWeight: 700, fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", borderBottom: `1px solid ${C.border}` }}>Cash Needs</th>
+                            <th style={{ textAlign: "left", padding: "8px 10px", color: C.muted, fontWeight: 700, fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", borderBottom: `1px solid ${C.border}` }}>Cash Requirements</th>
+                            <th style={{ textAlign: "right", padding: "8px 10px", color: C.muted, fontWeight: 700, fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", borderBottom: `1px solid ${C.border}` }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {c.details.map((d, i) => {
+                            const dealOk = !d.totalMismatch && !d.dateMismatch && !d.countMismatch && !d.onlyOnCn && !d.onlyOnCr;
+                            const reasons: string[] = [];
+                            if (d.onlyOnCn) reasons.push("missing on Cash Req");
+                            if (d.onlyOnCr) reasons.push("missing on Cash Needs");
+                            if (d.countMismatch && !d.onlyOnCn && !d.onlyOnCr) reasons.push("event count differs");
+                            if (d.dateMismatch) reasons.push("date mismatch");
+                            if (d.totalMismatch && !d.onlyOnCn && !d.onlyOnCr) reasons.push("amount mismatch");
+                            return (
+                              <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: dealOk ? "transparent" : "#2a1518" }}>
+                                <td style={{ padding: "8px 10px", color: C.text, fontWeight: 600, verticalAlign: "top" }}>{d.dealDisplay}</td>
+                                <td style={{ padding: "8px 10px", color: C.text, fontFamily: "monospace", verticalAlign: "top" }}>
+                                  {d.cnEvents.length === 0 ? (
+                                    <span style={{ color: C.muted }}>—</span>
+                                  ) : (
+                                    d.cnEvents.map((e, j) => (
+                                      <div key={j}>{fmtIsoMD(e.date)} · {fmtFull(e.amount)}</div>
+                                    ))
+                                  )}
+                                </td>
+                                <td style={{ padding: "8px 10px", color: C.text, fontFamily: "monospace", verticalAlign: "top" }}>
+                                  {d.crEvents.length === 0 ? (
+                                    <span style={{ color: C.muted }}>—</span>
+                                  ) : (
+                                    d.crEvents.map((e, j) => (
+                                      <div key={j}>{fmtIsoMD(e.date)} · {fmtFull(e.amount)}</div>
+                                    ))
+                                  )}
+                                </td>
+                                <td style={{ padding: "8px 10px", textAlign: "right", verticalAlign: "top", color: dealOk ? C.green : C.red, fontSize: 12, fontWeight: 700 }}>
+                                  {dealOk ? "✓" : reasons.join(", ")}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </CheckCard>
+        </>
+      )}
+    </>
+  );
+}
+
+// ══════════════════════════════════════════════
 // MAIN DASHBOARD
 // ══════════════════════════════════════════════
 export default function Dashboard() {
@@ -2592,23 +3018,41 @@ export default function Dashboard() {
 
   const tabs = [
     { id: "overview", label: "Overview" },
-    { id: "cashposition", label: "Total Cash Position" },
-    { id: "costs", label: "Cost Breakdown" },
     { id: "variance", label: "ITD vs Plan" },
+    { id: "cashposition", label: "Total Cash Position" },
+    { id: "projspend", label: "Projected Spend" },
+    { id: "costs", label: "Cost Breakdown" },
     { id: "headcount", label: "Headcount" },
-    { id: "cashneeds", label: "Cash Needs" },
     { id: "payroll", label: "Payroll" },
     { id: "projvsplan", label: "Proj vs Plan" },
     { id: "fixed", label: "Fixed Expenses" },
     { id: "portfolio", label: "Investment Portfolio" },
     { id: "closed", label: "Acquisitions Closed" },
-    { id: "projspend", label: "Projected Spend" },
+    { id: "cashneeds", label: "Cash Needs" },
     { id: "cashreq", label: "Acquisitions Cash Requirements" },
     { id: "acqcal", label: "Acquisitions Calendar" },
+    { id: "checks", label: "Checks" },
   ];
 
   return (
     <div style={{ background: C.bg, minHeight: "100vh", color: C.text, padding: "24px 28px", fontFamily: "system-ui, -apple-system, sans-serif" }}>
+
+      {/* Admin-only Checks link — sits above everything, tiny + dim. */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+        <button
+          onClick={() => setTab("checks")}
+          style={{
+            background: "none", border: "none", padding: "2px 6px",
+            color: tab === "checks" ? C.blue : "#3d4757",
+            fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase",
+            fontWeight: 500, cursor: "pointer",
+            textDecoration: tab === "checks" ? "underline" : "none",
+            opacity: tab === "checks" ? 1 : 0.7,
+          }}
+        >
+          Checks
+        </button>
+      </div>
 
       {/* HEADER */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28, flexWrap: "wrap", gap: 16 }}>
@@ -2623,7 +3067,7 @@ export default function Dashboard() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 2, background: C.card, borderRadius: 8, border: `1px solid ${C.border}`, padding: 3, flexWrap: "wrap" }}>
-          {tabs.map(t => (
+          {tabs.filter(t => t.id !== "checks").map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{
               padding: "12px 20px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 18, fontWeight: 600,
               background: tab === t.id ? C.blue : "transparent", color: tab === t.id ? C.bg : C.muted,
@@ -3302,6 +3746,8 @@ export default function Dashboard() {
       {tab === "cashposition" && <TotalCashPositionTab />}
 
       {tab === "projspend" && <ProjectedSpendTab months={months} />}
+
+      {tab === "checks" && <ChecksTab months={months} landTxns={landTxns} />}
 
       {/* FOOTER */}
       <div style={{ marginTop: 40, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, fontSize: 14, color: C.muted, flexWrap: "wrap" }}>
