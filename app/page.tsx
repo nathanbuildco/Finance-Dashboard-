@@ -2143,7 +2143,7 @@ function CashRequirementsTab() {
               <tbody>
                 {visible.deals.map((deal, di) => {
                   const rowBg = di % 2 === 0 ? C.card : "#171c26";
-                  const notUnderContract = /tito|texas\s*aggregate|north\s*entrance|south\s*entrance/i.test(deal.name);
+                  const notUnderContract = /tito|texas\s*aggregate|north\s*entrance|south\s*entrance|sonny/i.test(deal.name);
                   const footnoteNum = /^h&pb\s*basco$/i.test(deal.name) ? 1
                     : /^tex\s*mix$/i.test(deal.name) ? 2
                     : null;
@@ -2229,7 +2229,7 @@ function CashRequirementsTab() {
               </tbody>
             </table>
           </div>
-          {visible.deals.some((d) => /tito|texas\s*aggregate|north\s*entrance|south\s*entrance/i.test(d.name)) && (
+          {visible.deals.some((d) => /tito|texas\s*aggregate|north\s*entrance|south\s*entrance|sonny/i.test(d.name)) && (
             <div style={{ padding: "12px 20px", fontSize: 14, color: C.muted, fontStyle: "italic", borderTop: `1px solid ${C.border}` }}>
               * Not yet under contract
             </div>
@@ -3850,14 +3850,6 @@ export default function Dashboard() {
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
                 {next2CN.map((m, idx) => {
                   const txns = cashNeedsLand(m.month).slice().sort((a, b) => a.date.localeCompare(b.date));
-                  // For the calendar-current month, the deposit dates are firm — show
-                  // "Date"; future months are still estimates.
-                  const monthDate = parseMonthLabel(m.month);
-                  const now = new Date();
-                  const isCurrentMonth = monthDate
-                    ? monthDate.getFullYear() === now.getFullYear() && monthDate.getMonth() === now.getMonth()
-                    : false;
-                  const dateHeader = isCurrentMonth ? "Date" : "Estimated Date";
                   if (txns.length === 0) {
                     return (
                       <div key={idx} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "24px 28px", flex: "1 1 380px", minWidth: 380 }}>
@@ -3868,7 +3860,7 @@ export default function Dashboard() {
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 18 }}>
                           <thead>
                             <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                              {["Deal", dateHeader, "Type", "Amount"].map((h, i) => (
+                              {["Deal", "Estimated Date", "Type", "Amount"].map((h, i) => (
                                 <th key={i} style={{ padding: "10px 8px", textAlign: i === 3 ? "right" : "left", color: C.muted, fontWeight: 600, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
                               ))}
                             </tr>
@@ -3883,7 +3875,7 @@ export default function Dashboard() {
                     );
                   }
                   const monthTotal = txns.reduce((s, t) => s + t.amount, 0);
-                  const NOT_UNDER_CONTRACT = ["tito", "texas aggregates"];
+                  const NOT_UNDER_CONTRACT = ["tito", "texas aggregates", "sonny"];
                   const isNotUnderContract = (deal: string) =>
                     NOT_UNDER_CONTRACT.some((needle) => deal.toLowerCase().includes(needle));
                   const anyNotUnderContract = txns.some((t) => isNotUnderContract(t.deal));
@@ -3896,7 +3888,7 @@ export default function Dashboard() {
                       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 18 }}>
                         <thead>
                           <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                            {["Deal", dateHeader, "Type", "Amount"].map((h, i) => (
+                            {["Deal", "Estimated Date", "Type", "Amount"].map((h, i) => (
                               <th key={i} style={{ padding: "10px 8px", textAlign: i === 3 ? "right" : "left", color: C.muted, fontWeight: 600, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
                             ))}
                           </tr>
