@@ -2512,6 +2512,7 @@ function ChecksTab({ months, landTxns, lineItems }: { months: MonthData[]; landT
   const [operatingCash, setOperatingCash] = useState(0);
   const [portfolioDate, setPortfolioDate] = useState<string>("");
   const [cashReq, setCashReq] = useState<CashReqSchedule | null>(null);
+  const [acqCalendar, setAcqCalendar] = useState<AcqCalendarData | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -2519,10 +2520,11 @@ function ChecksTab({ months, landTxns, lineItems }: { months: MonthData[]; landT
     (async () => {
       try {
         setLoading(true);
-        const [snapsRes, opRes, crRes] = await Promise.all([
+        const [snapsRes, opRes, crRes, calRes] = await Promise.all([
           fetch("/api/portfolio/snapshots", { cache: "no-store" }),
           fetch(OPERATING_CASH_CSV_URL, { cache: "no-store" }),
           fetch("/api/cash-requirements/list", { cache: "no-store" }),
+          fetch("/api/acq-calendar/list", { cache: "no-store" }),
         ]);
 
         if (snapsRes.ok) {
@@ -2554,6 +2556,11 @@ function ChecksTab({ months, landTxns, lineItems }: { months: MonthData[]; landT
         if (crRes.ok) {
           const crData = await crRes.json();
           setCashReq(crData.schedule ?? null);
+        }
+
+        if (calRes.ok) {
+          const calData = await calRes.json();
+          setAcqCalendar(calData.calendar ?? null);
         }
         setErr(null);
       } catch (e) {
@@ -2792,6 +2799,41 @@ function ChecksTab({ months, landTxns, lineItems }: { months: MonthData[]; landT
     </div>
   );
 
+  // ── Check 5: Deal-name parity between Acquisitions Calendar and Cash Req ─
+  // Compares the full deal roster on both tabs (name only, ignoring
+  // amounts and dates). Uses the same fuzzy match as Check 3.
+  type DealParity = {
+    displayName: string;
+    onCalendar: boolean;
+    onCashReq: boolean;
+  };
+  const check5Rows: DealParity[] = (() => {
+    const rows: DealParity[] = [];
+    const calDeals = acqCalendar?.deals ?? [];
+    const crDeals = cashReq?.deals ?? [];
+    const usedCr = new Set<number>();
+    for (const cd of calDeals) {
+      const matchIdx = crDeals.findIndex((c, i) => !usedCr.has(i) && dealMatches(cd.name, c.name));
+      if (matchIdx >= 0) usedCr.add(matchIdx);
+      rows.push({
+        displayName: cd.name,
+        onCalendar: true,
+        onCashReq: matchIdx >= 0,
+      });
+    }
+    crDeals.forEach((c, i) => {
+      if (usedCr.has(i)) return;
+      rows.push({
+        displayName: c.name,
+        onCalendar: false,
+        onCashReq: true,
+      });
+    });
+    rows.sort((a, b) => canonDeal(a.displayName).localeCompare(canonDeal(b.displayName)));
+    return rows;
+  })();
+  const check5Ok = check5Rows.every((r) => r.onCalendar && r.onCashReq);
+
   const anyLoading = loading;
   const check3Ok = check3.every((c) => pass(c.delta) && c.detailOk);
   // Wider tolerance for Check 4 — MANUAL_FIXED_EXPENSES rounds to hand-typed
@@ -2800,7 +2842,7 @@ function ChecksTab({ months, landTxns, lineItems }: { months: MonthData[]; landT
   const overallOk =
     pass(check1.delta) &&
     pass(check2Total.delta) && pass(check2Etf.delta) && pass(check2Mstr.delta) &&
-    check3Ok && check4Ok;
+    check3Ok && check4Ok && check5Ok;
 
   const fmtIsoMD = (iso: string): string => {
     const parts = iso.split("-").map(Number);
@@ -2959,6 +3001,47 @@ function ChecksTab({ months, landTxns, lineItems }: { months: MonthData[]; landT
             <Row label="NTM Total Projected Spend (sheet)" value={fmtFull(check4.total)} muted />
             {!check4Ok && (
               <Row label="Delta" value={fmtFull(check4.delta)} />
+            )}
+          </CheckCard>
+
+          {/* Check 5 — Deal-name parity between Acquisitions Calendar and Cash Req */}
+          <CheckCard
+            title="5. Acquisitions Calendar deals = Acquisitions Cash Requirements deals"
+            subtitle="Every deal on the Acquisitions Calendar tab should appear on the Acquisitions Cash Requirements tab (and vice versa). Names are compared case-insensitively with non-alphanumeric characters stripped."
+            ok={check5Ok}
+          >
+            {check5Rows.length === 0 ? (
+              <div style={{ color: C.muted, fontStyle: "italic", padding: "8px 0" }}>
+                No deals loaded on either tab yet.
+              </div>
+            ) : (
+              <div style={{ marginTop: 8, overflowX: "auto" }}>
+                <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%", minWidth: 520 }}>
+                  <thead>
+                    <tr style={{ background: "#1a1f2e" }}>
+                      <th style={{ textAlign: "left", padding: "8px 10px", color: C.muted, fontWeight: 700, fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", borderBottom: `1px solid ${C.border}` }}>Deal</th>
+                      <th style={{ textAlign: "center", padding: "8px 10px", color: C.muted, fontWeight: 700, fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", borderBottom: `1px solid ${C.border}` }}>Acquisitions Calendar</th>
+                      <th style={{ textAlign: "center", padding: "8px 10px", color: C.muted, fontWeight: 700, fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", borderBottom: `1px solid ${C.border}` }}>Acquisitions Cash Req</th>
+                      <th style={{ textAlign: "right", padding: "8px 10px", color: C.muted, fontWeight: 700, fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", borderBottom: `1px solid ${C.border}` }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {check5Rows.map((r, i) => {
+                      const ok = r.onCalendar && r.onCashReq;
+                      return (
+                        <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: ok ? "transparent" : "#2a1518" }}>
+                          <td style={{ padding: "8px 10px", color: C.text, fontWeight: 600 }}>{r.displayName}</td>
+                          <td style={{ padding: "8px 10px", textAlign: "center", color: r.onCalendar ? C.green : C.muted, fontWeight: 700 }}>{r.onCalendar ? "✓" : "—"}</td>
+                          <td style={{ padding: "8px 10px", textAlign: "center", color: r.onCashReq ? C.green : C.muted, fontWeight: 700 }}>{r.onCashReq ? "✓" : "—"}</td>
+                          <td style={{ padding: "8px 10px", textAlign: "right", color: ok ? C.green : C.red, fontSize: 12, fontWeight: 700 }}>
+                            {ok ? "✓" : r.onCalendar ? "missing on Cash Req" : "missing on Calendar"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </CheckCard>
         </>
