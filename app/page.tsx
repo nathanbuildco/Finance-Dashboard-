@@ -539,6 +539,13 @@ const C = {
   red: "#ef5350", orange: "#ffa726", yellow: "#ffee58",
   gold: "#d4a574",
   navyBand: "#1a2740",
+  navyBandAlt: "#12192b",
+  bluePhase: "#4fc3f7",       // Contingency bar
+  blueLightPhase: "#9adcf7",  // Expected closing bar (lighter tint of C.blue)
+  grayPhase: "#4a5567",       // Extension bar (neutral gray)
+  rollingBand: "#25384f",     // Rolling band fill — muted desaturated blue
+  rollingTick: "#a8d4f0",     // Pale blue tick drawn on the rolling band
+  depositRate: "#8fa4bd",     // Italic muted blue-gray for rate expressions
 };
 
 // ══════════════════════════════════════════════
@@ -1122,6 +1129,470 @@ function fmtMoneyCell(n: number): string {
   if (n === 0) return "—";
   const sign = n < 0 ? "-" : "";
   return `${sign}$${Math.round(Math.abs(n)).toLocaleString()}`;
+}
+
+// ══════════════════════════════════════════════
+// ACQUISITION CALENDAR TAB (Gantt view)
+// ══════════════════════════════════════════════
+// A wide, month-across-columns Gantt of upcoming acquisitions. Deals sit in
+// stacked rows with static columns on the left (name / acres / price /
+// deposit), and colored bars on the right laid out on the timeline grid.
+// The chart data lives in the "Acquisition Calendar" Google Sheet tab and is
+// refreshed by uploading a screenshot of the source Gantt (Claude vision
+// extraction). No editing here — the extracted data is the source of truth.
+
+interface AcqClosing { date: string; amount: number }
+interface AcqSegment {
+  phase: "contingency" | "expectedClosing" | "extension" | "rolling";
+  start: string; end: string; milestoneDate: string | null;
+  closings?: AcqClosing[];
+  note?: string;
+}
+interface AcqDeal {
+  name: string; provisional: boolean;
+  acres: number; price: number;
+  depositLabel: string; depositNote: string | null;
+  depositIsRate?: boolean;
+  segments: AcqSegment[];
+}
+interface AcqCalendarData {
+  title: string;
+  timelineStart: string;
+  timelineEnd: string;
+  deals: AcqDeal[];
+  totals: { acres: number; price: number };
+  totalsFromImage?: { acres: number; price: number };
+  footnote: string | null;
+  warnings: string[];
+}
+
+// Convert "YYYY-MM..." to a total-months integer (year*12 + month0).
+function acqYmTotal(iso: string): number {
+  const y = parseInt(iso.slice(0, 4), 10);
+  const m = parseInt(iso.slice(5, 7), 10) - 1;
+  return y * 12 + m;
+}
+function acqDaysInMonth(year: number, month0: number): number {
+  return new Date(year, month0 + 1, 0).getDate();
+}
+// Fractional months from timelineStart to `iso` ("YYYY-MM-DD").
+function acqDateToOffset(iso: string, timelineStart: string): number {
+  const y = parseInt(iso.slice(0, 4), 10);
+  const m0 = parseInt(iso.slice(5, 7), 10) - 1;
+  const d = parseInt(iso.slice(8, 10), 10);
+  const monthsAhead = (y * 12 + m0) - acqYmTotal(timelineStart);
+  const dim = acqDaysInMonth(y, m0);
+  const frac = ((d - 1) + 0.5) / dim; // center of the day within the month
+  return monthsAhead + frac;
+}
+function acqEnumerateMonths(startYm: string, endYm: string): { year: number; month0: number; label: string }[] {
+  const MONTH_ABBRS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const startT = acqYmTotal(startYm);
+  const endT = acqYmTotal(endYm);
+  const out: { year: number; month0: number; label: string }[] = [];
+  for (let t = startT; t <= endT; t++) {
+    const year = Math.floor(t / 12);
+    const month0 = t % 12;
+    out.push({ year, month0, label: MONTH_ABBRS[month0] });
+  }
+  return out;
+}
+function fmtPriceM(n: number): string {
+  if (n === 0) return "—";
+  return `$${(n / 1_000_000).toFixed(2)}M`;
+}
+function fmtMDCompact(iso: string | null): string {
+  if (!iso) return "";
+  const [, mo, d] = iso.split("-").map((x) => parseInt(x, 10));
+  return `${mo}/${d}`;
+}
+
+function AcquisitionCalendarTab() {
+  const [calendar, setCalendar] = useState<AcqCalendarData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await fetch("/api/acq-calendar/list", { cache: "no-store" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setCalendar(data.calendar);
+      setErr(null);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function handleUpload(file: File) {
+    setUploading(true);
+    setUploadMsg(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/acq-calendar/upload", { method: "POST", body: fd });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      const cal: AcqCalendarData = body.calendar;
+      setCalendar(cal);
+      setUploadMsg(`Loaded ${cal.deals.length} deals across ${acqEnumerateMonths(cal.timelineStart, cal.timelineEnd).length} months.`);
+    } catch (e) {
+      setUploadMsg(`Error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+
+  return (
+    <>
+      <Section>Acquisitions Calendar</Section>
+
+      {/* Upload control (compact, matches Cash Requirements) */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: uploading ? "wait" : "pointer", background: uploading ? C.border : C.blue, color: C.bg, padding: "5px 12px", borderRadius: 6, fontWeight: 600, fontSize: 12 }}>
+          {uploading ? "Extracting…" : "Upload screenshot"}
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            disabled={uploading}
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleUpload(f);
+              e.target.value = "";
+            }}
+          />
+        </label>
+        {uploadMsg && (
+          <span style={{ color: uploadMsg.startsWith("Error") ? C.red : C.green, fontSize: 12 }}>{uploadMsg}</span>
+        )}
+      </div>
+
+      {loading && <div style={{ color: C.muted, marginTop: 12 }}>Loading…</div>}
+      {err && <div style={{ color: C.red, marginTop: 12 }}>{err}</div>}
+
+      {!loading && !err && !calendar && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "32px 28px", color: C.muted, fontSize: 16 }}>
+          No calendar loaded yet. Upload a screenshot of the Master Acquisition Calendar above.
+        </div>
+      )}
+
+      {calendar && <AcqGantt calendar={calendar} />}
+    </>
+  );
+}
+
+// ── Gantt renderer — pure, calendar in / DOM out ─────────────────────────
+
+function AcqGantt({ calendar }: { calendar: AcqCalendarData }) {
+  const months = useMemo(
+    () => acqEnumerateMonths(calendar.timelineStart, calendar.timelineEnd),
+    [calendar.timelineStart, calendar.timelineEnd],
+  );
+  const MONTH_W = 68;
+  const timelineWidth = months.length * MONTH_W;
+  const ROW_H = 62;
+  const BAR_H = 24;
+
+  // Year band spans: contiguous runs of months in the same year.
+  const yearSpans: { year: number; startIdx: number; count: number }[] = [];
+  for (let i = 0; i < months.length; i++) {
+    const last = yearSpans[yearSpans.length - 1];
+    if (last && last.year === months[i].year) last.count++;
+    else yearSpans.push({ year: months[i].year, startIdx: i, count: 1 });
+  }
+
+  const phaseColor = (p: AcqSegment["phase"]) =>
+    p === "contingency" ? C.bluePhase
+    : p === "expectedClosing" ? C.blueLightPhase
+    : C.grayPhase;
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ overflowX: "auto", padding: "18px 0 22px" }}>
+        <table style={{ borderCollapse: "separate", borderSpacing: 0, minWidth: "100%", fontSize: 13 }}>
+          <thead>
+            <tr>
+              {/* Static-label header cells — sticky left */}
+              <th style={stickyLabelHeadStyle(C, 0, 3)}>Deal</th>
+              <th style={stickyLabelHeadStyle(C, 1, 3, "right")}>Acres</th>
+              <th style={stickyLabelHeadStyle(C, 2, 3, "right")}>Price</th>
+              <th style={stickyLabelHeadStyle(C, 3, 3, "left")}>Deposit</th>
+              {/* Timeline header cell holds the two-tier year+month band */}
+              <th style={{
+                position: "sticky", top: 0, zIndex: 2, background: C.card, padding: 0,
+                borderBottom: `1px solid ${C.border}`,
+              }}>
+                <div style={{ width: timelineWidth }}>
+                  {/* Year band */}
+                  <div style={{ display: "flex", height: 30 }}>
+                    {yearSpans.map((y, i) => (
+                      <div key={i} style={{
+                        width: y.count * MONTH_W,
+                        background: i % 2 === 0 ? C.navyBand : C.navyBandAlt,
+                        color: C.text,
+                        fontSize: 14,
+                        fontWeight: 700,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderRight: i < yearSpans.length - 1 ? `1px solid ${C.border}` : undefined,
+                      }}>{y.year}</div>
+                    ))}
+                  </div>
+                  {/* Month band */}
+                  <div style={{ display: "flex", height: 28, background: C.card }}>
+                    {months.map((m, i) => (
+                      <div key={i} style={{
+                        width: MONTH_W,
+                        color: C.muted,
+                        fontSize: 12,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                        fontWeight: 600,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        borderRight: `1px solid ${C.border}`,
+                      }}>{m.label}</div>
+                    ))}
+                  </div>
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {calendar.deals.map((deal, di) => {
+              const rowBg = di % 2 === 0 ? C.card : "#171c26";
+              // Compute segment left/width in px, then plan milestone label
+              // stagger to avoid overlap within this row.
+              type PosSeg = { seg: AcqSegment; leftPx: number; widthPx: number };
+              const posSegs: PosSeg[] = deal.segments.map((seg) => {
+                const s = acqDateToOffset(seg.start, calendar.timelineStart);
+                const e = acqDateToOffset(seg.end, calendar.timelineStart);
+                return { seg, leftPx: s * MONTH_W, widthPx: Math.max(4, (e - s) * MONTH_W) };
+              });
+              // Milestone label right-edge positions (segment right edge).
+              const labelPositions = posSegs.map((p) => p.leftPx + p.widthPx);
+              // Row 0 = closer to bar, row 1 = higher (stagger).
+              const labelRows: number[] = [];
+              for (let i = 0; i < posSegs.length; i++) {
+                if (i === 0) { labelRows.push(0); continue; }
+                labelRows.push(Math.abs(labelPositions[i] - labelPositions[i - 1]) < 36 ? 1 - labelRows[i - 1] : 0);
+              }
+              return (
+                <tr key={di} style={{ height: ROW_H }}>
+                  <td style={stickyLabelCellStyle(C, rowBg, 0)}>
+                    {deal.name}{deal.provisional ? " *" : ""}
+                  </td>
+                  <td style={stickyLabelCellStyle(C, rowBg, 1, "right")}>
+                    <span style={{ fontFamily: "monospace" }}>{deal.acres.toLocaleString()}</span>
+                  </td>
+                  <td style={stickyLabelCellStyle(C, rowBg, 2, "right")}>
+                    <span style={{ fontFamily: "monospace" }}>{fmtPriceM(deal.price)}</span>
+                  </td>
+                  <td style={stickyLabelCellStyle(C, rowBg, 3, "left")}>
+                    <div style={{
+                      fontSize: 13,
+                      color: deal.depositIsRate ? C.depositRate : C.text,
+                      fontStyle: deal.depositIsRate ? "italic" : "normal",
+                      lineHeight: 1.35,
+                    }}>{deal.depositLabel}</div>
+                    {deal.depositNote && (
+                      <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{deal.depositNote}</div>
+                    )}
+                  </td>
+                  {/* Timeline cell — vertical month grid + absolutely-positioned bar + milestone labels. */}
+                  <td style={{
+                    background: rowBg, padding: 0, position: "relative", height: ROW_H,
+                    borderBottom: `1px solid ${C.border}`,
+                    backgroundImage: `linear-gradient(to right, ${C.border} 1px, transparent 1px)`,
+                    backgroundSize: `${MONTH_W}px 100%`,
+                    minWidth: timelineWidth,
+                    width: timelineWidth,
+                  }}>
+                    {/* Bar — rolling segments get a muted-blue band with per-month ticks. */}
+                    <div style={{ position: "absolute", top: (ROW_H - BAR_H) / 2 + 5, height: BAR_H, left: 0, right: 0 }}>
+                      {posSegs.map((p, i) => {
+                        const seg = p.seg;
+                        if (seg.phase === "rolling" && seg.closings && seg.closings.length > 0) {
+                          return (
+                            <div key={i} style={{
+                              position: "absolute",
+                              left: p.leftPx,
+                              width: p.widthPx,
+                              height: BAR_H,
+                              background: C.rollingBand,
+                            }} title={seg.note ?? `rolling · ${seg.start} → ${seg.end}`}>
+                              {seg.closings.map((c, ci) => {
+                                // Position on the actual closing DAY within its
+                                // month (so 7/31 sits at the right edge of Jul,
+                                // 1/1 at the left edge, etc.).
+                                const tickX = acqDateToOffset(c.date, calendar.timelineStart) * MONTH_W;
+                                return (
+                                  <div key={ci} style={{
+                                    position: "absolute",
+                                    left: tickX - p.leftPx - 1,
+                                    top: 2, bottom: 2, width: 2,
+                                    background: C.rollingTick,
+                                  }} />
+                                );
+                              })}
+                            </div>
+                          );
+                        }
+                        return (
+                          <div key={i} style={{
+                            position: "absolute",
+                            left: p.leftPx,
+                            width: p.widthPx,
+                            height: BAR_H,
+                            background: phaseColor(seg.phase),
+                            borderRight: i < posSegs.length - 1 ? `1px solid ${C.bg}` : undefined,
+                          }} title={`${seg.phase} · ${seg.start} → ${seg.end}`} />
+                        );
+                      })}
+                    </div>
+                    {/* Above-bar labels: milestone dates for standard phases, per-closing M/D for rolling. */}
+                    {posSegs.flatMap((p, i) => {
+                      const seg = p.seg;
+                      if (seg.phase === "rolling" && seg.closings && seg.closings.length > 0) {
+                        // Collision fallback: if a M/D label wouldn't fit within a month
+                        // column at the current MONTH_W, drop every other closing label.
+                        const stride = MONTH_W < 32 ? 2 : 1;
+                        return seg.closings
+                          .map((c, ci) => ({ c, ci }))
+                          .filter(({ ci }) => ci % stride === 0)
+                          .map(({ c, ci }) => {
+                            const labelX = acqDateToOffset(c.date, calendar.timelineStart) * MONTH_W;
+                            return (
+                              <div key={`r${i}-${ci}`} style={{
+                                position: "absolute",
+                                left: labelX,
+                                transform: "translateX(-50%)",
+                                top: 12,
+                                fontSize: 8.5,
+                                fontWeight: 700,
+                                color: C.text,
+                                background: rowBg,
+                                padding: "0 2px",
+                                whiteSpace: "nowrap",
+                              }}>{fmtMDCompact(c.date)}</div>
+                            );
+                          });
+                      }
+                      if (!seg.milestoneDate) return [];
+                      const label = fmtMDCompact(seg.milestoneDate);
+                      const isExtension = seg.phase === "extension";
+                      const topOffset = labelRows[i] === 1 ? -4 : 12;
+                      return [
+                        <div key={`m${i}`} style={{
+                          position: "absolute",
+                          left: p.leftPx + p.widthPx,
+                          transform: "translateX(-100%)",
+                          top: topOffset,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: isExtension ? C.muted : C.text,
+                          background: rowBg,
+                          padding: "0 4px",
+                          whiteSpace: "nowrap",
+                        }}>{label}</div>,
+                      ];
+                    })}
+                  </td>
+                </tr>
+              );
+            })}
+            {/* TOTAL row */}
+            <tr style={{ height: ROW_H }}>
+              <td style={{ ...stickyLabelCellStyle(C, C.card, 0), borderTop: `2px solid ${C.border}`, textTransform: "uppercase", letterSpacing: "0.08em", color: C.gold, fontWeight: 700 }}>TOTAL</td>
+              <td style={{ ...stickyLabelCellStyle(C, C.card, 1, "right"), borderTop: `2px solid ${C.border}`, color: C.gold, fontFamily: "monospace", fontWeight: 700 }}>
+                {calendar.totals.acres.toLocaleString()}
+              </td>
+              <td style={{ ...stickyLabelCellStyle(C, C.card, 2, "right"), borderTop: `2px solid ${C.border}`, color: C.gold, fontFamily: "monospace", fontWeight: 700 }}>
+                {fmtPriceM(calendar.totals.price)}
+              </td>
+              <td style={{ ...stickyLabelCellStyle(C, C.card, 3, "left"), borderTop: `2px solid ${C.border}` }} />
+              <td style={{ background: C.card, borderTop: `2px solid ${C.border}`, minWidth: timelineWidth, width: timelineWidth }} />
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Legend */}
+      <div style={{ display: "flex", gap: 28, padding: "14px 24px", flexWrap: "wrap", borderTop: `1px solid ${C.border}` }}>
+        {[
+          { label: "Contingency", color: C.bluePhase, tick: false },
+          { label: "Expected Closing", color: C.blueLightPhase, tick: false },
+          { label: "Extension", color: C.grayPhase, tick: false },
+          { label: "Rolling Closings", color: C.rollingBand, tick: true },
+        ].map((k, i) => {
+          const swatchStyle: React.CSSProperties = { display: "inline-block", width: 22, height: 14, background: k.color };
+          if (k.tick) {
+            // Three vertical ticks drawn on the band via a repeating gradient — one at ~4px, ~11px, ~18px.
+            swatchStyle.backgroundImage = `repeating-linear-gradient(to right,
+              transparent 0, transparent 6px,
+              ${C.rollingTick} 6px, ${C.rollingTick} 7px)`;
+          }
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: C.muted }}>
+              <span style={swatchStyle} />
+              {k.label}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footnote */}
+      {calendar.footnote && (
+        <div style={{ padding: "0 24px 18px", fontSize: 13, color: C.muted, fontStyle: "italic" }}>
+          {calendar.footnote}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Fixed left column widths, in the order they appear.
+// Deposit widened to fit expressions like "$500K + $9.5M + $3.05M ext" without wrapping.
+const ACQ_COL_WIDTHS = [260, 90, 110, 300] as const;
+function acqLeftOffset(colIdx: number): number {
+  let s = 0;
+  for (let i = 0; i < colIdx; i++) s += ACQ_COL_WIDTHS[i];
+  return s;
+}
+
+function stickyLabelHeadStyle(c: typeof C, colIdx: number, z: number, align: "left" | "right" = "left"): React.CSSProperties {
+  const width = ACQ_COL_WIDTHS[colIdx];
+  return {
+    position: "sticky", left: acqLeftOffset(colIdx), top: 0, zIndex: z,
+    background: c.card, color: c.muted,
+    textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 12, fontWeight: 700,
+    padding: "12px 16px", textAlign: align,
+    borderBottom: `1px solid ${c.border}`, borderRight: `1px solid ${c.border}`,
+    minWidth: width, width, maxWidth: width,
+  };
+}
+function stickyLabelCellStyle(c: typeof C, bg: string, colIdx: number, align: "left" | "right" = "left"): React.CSSProperties {
+  const width = ACQ_COL_WIDTHS[colIdx];
+  return {
+    position: "sticky", left: acqLeftOffset(colIdx), zIndex: 1,
+    background: bg, color: c.text,
+    padding: "12px 16px", textAlign: align,
+    fontSize: 14, fontWeight: 600,
+    borderRight: `1px solid ${c.border}`, borderBottom: `1px solid ${c.border}`,
+    minWidth: width, width, maxWidth: width,
+    verticalAlign: "middle",
+  };
 }
 
 function CashRequirementsTab() {
@@ -1952,6 +2423,7 @@ export default function Dashboard() {
     { id: "closed", label: "Acquisitions Closed" },
     { id: "projspend", label: "Projected Spend" },
     { id: "cashreq", label: "Acquisitions Cash Requirements" },
+    { id: "acqcal", label: "Acquisitions Calendar" },
   ];
 
   return (
@@ -1965,8 +2437,8 @@ export default function Dashboard() {
           <div style={{ fontSize: 14, textTransform: "uppercase", letterSpacing: "0.12em", color: C.blue, marginBottom: 6, fontWeight: 600 }}>Financial Projections</div>
           <h1 style={{ fontSize: 44, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>Finance Dashboard</h1>
           <div style={{ fontSize: 20, color: C.muted, marginTop: 10 }}>
-            {tab !== "cashneeds" && tab !== "cashreq" && <>Actuals through {reviewLabel}</>}
-            <button onClick={load} style={{ marginLeft: tab !== "cashneeds" && tab !== "cashreq" ? 16 : 0, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 16 }}>↻ Refresh</button>
+            {tab !== "cashneeds" && tab !== "cashreq" && tab !== "acqcal" && <>Actuals through {reviewLabel}</>}
+            <button onClick={load} style={{ marginLeft: tab !== "cashneeds" && tab !== "cashreq" && tab !== "acqcal" ? 16 : 0, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 16 }}>↻ Refresh</button>
           </div>
         </div>
         <div style={{ display: "flex", gap: 2, background: C.card, borderRadius: 8, border: `1px solid ${C.border}`, padding: 3, flexWrap: "wrap" }}>
@@ -2643,6 +3115,8 @@ export default function Dashboard() {
       {tab === "closed" && <AcquisitionsClosedTab />}
 
       {tab === "cashreq" && <CashRequirementsTab />}
+
+      {tab === "acqcal" && <AcquisitionCalendarTab />}
 
       {tab === "projspend" && <ProjectedSpendTab months={months} />}
 

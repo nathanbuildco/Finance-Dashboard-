@@ -2,6 +2,7 @@ import { google, sheets_v4 } from "googleapis";
 import type { Holding, ParsedStatement } from "./portfolio-parser";
 import type { LandTxn } from "./land-parser";
 import type { Schedule } from "./cash-req-parser";
+import type { AcqCalendar, Phase } from "./acq-calendar-model";
 
 export const PORTFOLIO_TAB = "Portfolio";
 export const PORTFOLIO_HEADERS = [
@@ -27,6 +28,32 @@ export const LAND_HEADERS = [
 ] as const;
 
 export const CLOSED_TAB = "Acquisitions Closed";
+
+export const ACQ_CAL_TAB = "Acquisition Calendar";
+export const ACQ_CAL_HEADERS = [
+  "Deal",
+  "Provisional",
+  "Acres",
+  "Price",
+  "Deposit Label",
+  "Deposit Note",
+  "Deal Order",
+  "Segment Order",
+  "Phase",
+  "Segment Start",
+  "Segment End",
+  "Milestone Date",
+  "Title",
+  "Timeline Start",
+  "Timeline End",
+  "Footnote",
+  "Totals Acres From Image",
+  "Totals Price From Image",
+  "Uploaded At",
+  "Closings JSON",
+  "Segment Note",
+  "Deposit Is Rate",
+] as const;
 
 export const CASH_REQ_TAB = "Cash Requirements";
 export const CASH_REQ_HEADERS = [
@@ -599,6 +626,259 @@ export async function listCashRequirements(): Promise<Schedule | null> {
     deals,
     monthlyTotalsComputed,
     cumulativeComputed,
+    warnings: [],
+  };
+}
+
+// ── Acquisition Calendar ──────────────────────────────────────────────────
+
+async function ensureAcqCalTab(
+  sheets: sheets_v4.Sheets,
+  spreadsheetId: string,
+): Promise<number> {
+  let sheetId = await getTabSheetId(sheets, spreadsheetId, ACQ_CAL_TAB);
+  if (sheetId !== null) return sheetId;
+
+  const created = await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [{ addSheet: { properties: { title: ACQ_CAL_TAB } } }],
+    },
+  });
+  sheetId = created.data.replies?.[0]?.addSheet?.properties?.sheetId ?? null;
+  if (sheetId === null) throw new Error("Failed to create Acquisition Calendar tab.");
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `${ACQ_CAL_TAB}!A1`,
+    valueInputOption: "RAW",
+    requestBody: { values: [ACQ_CAL_HEADERS as unknown as string[]] },
+  });
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          repeatCell: {
+            range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
+            cell: {
+              userEnteredFormat: {
+                textFormat: { bold: true },
+                horizontalAlignment: "CENTER",
+              },
+            },
+            fields: "userEnteredFormat(textFormat,horizontalAlignment)",
+          },
+        },
+        {
+          updateSheetProperties: {
+            properties: { sheetId, gridProperties: { frozenRowCount: 1 } },
+            fields: "gridProperties.frozenRowCount",
+          },
+        },
+      ],
+    },
+  });
+
+  return sheetId;
+}
+
+export async function replaceAcqCalendar(
+  cal: AcqCalendar,
+): Promise<{ cleared: number; appended: number }> {
+  const { sheets, spreadsheetId } = getSheetsClient();
+  await ensureAcqCalTab(sheets, spreadsheetId);
+
+  // Keep the header row in sync with ACQ_CAL_HEADERS so schema evolution
+  // (added columns) doesn't leave old sheets pointing at the wrong slots.
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `${ACQ_CAL_TAB}!A1`,
+    valueInputOption: "RAW",
+    requestBody: { values: [ACQ_CAL_HEADERS as unknown as string[]] },
+  });
+
+  const existing = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${ACQ_CAL_TAB}!A2:A`,
+  });
+  const cleared = (existing.data.values ?? []).length;
+  if (cleared > 0) {
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId,
+      range: `${ACQ_CAL_TAB}!A2:V`,
+    });
+  }
+
+  const uploadedAt = new Date().toISOString();
+  const rows: (string | number)[][] = [];
+  for (let di = 0; di < cal.deals.length; di++) {
+    const d = cal.deals[di];
+    // Emit at least one row per deal even if there are no segments, so the
+    // deal survives the round trip.
+    const segments = d.segments.length > 0 ? d.segments : [null];
+    for (let si = 0; si < segments.length; si++) {
+      const s = segments[si];
+      rows.push([
+        d.name,
+        d.provisional ? "TRUE" : "",
+        d.acres,
+        d.price,
+        d.depositLabel,
+        d.depositNote ?? "",
+        di,
+        si,
+        s?.phase ?? "",
+        s?.start ?? "",
+        s?.end ?? "",
+        s?.milestoneDate ?? "",
+        cal.title,
+        cal.timelineStart,
+        cal.timelineEnd,
+        cal.footnote ?? "",
+        cal.totalsFromImage?.acres ?? "",
+        cal.totalsFromImage?.price ?? "",
+        uploadedAt,
+        s?.closings && s.closings.length > 0 ? JSON.stringify(s.closings) : "",
+        s?.note ?? "",
+        d.depositIsRate ? "TRUE" : "",
+      ]);
+    }
+  }
+
+  if (rows.length > 0) {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: `${ACQ_CAL_TAB}!A1`,
+      valueInputOption: "RAW",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: { values: rows },
+    });
+  }
+
+  return { cleared, appended: rows.length };
+}
+
+export async function listAcqCalendar(): Promise<AcqCalendar | null> {
+  const { sheets, spreadsheetId } = getSheetsClient();
+  const tab = await getTabSheetId(sheets, spreadsheetId, ACQ_CAL_TAB);
+  if (tab === null) return null;
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${ACQ_CAL_TAB}!A2:V`,
+  });
+  const rows = res.data.values ?? [];
+  if (rows.length === 0) return null;
+
+  // Calendar-level metadata comes from the first row.
+  const first = rows[0];
+  const title = String(first[12] ?? "").trim() || "Master Acquisition Calendar";
+  const timelineStart = String(first[13] ?? "").trim();
+  const timelineEnd = String(first[14] ?? "").trim();
+  const footnote = String(first[15] ?? "").trim() || null;
+  const totAcresRaw = first[16];
+  const totPriceRaw = first[17];
+  const totalsFromImage =
+    totAcresRaw !== undefined && totAcresRaw !== "" &&
+    totPriceRaw !== undefined && totPriceRaw !== ""
+      ? { acres: Number(totAcresRaw), price: Number(totPriceRaw) }
+      : undefined;
+
+  // Rebuild deals in dealOrder, segments in segmentOrder.
+  type SegAgg = {
+    order: number; phase: Phase; start: string; end: string; milestoneDate: string | null;
+    closings?: { date: string; amount: number }[]; note?: string;
+  };
+  type DealAgg = {
+    name: string; provisional: boolean; acres: number; price: number;
+    depositLabel: string; depositNote: string | null; depositIsRate: boolean;
+    segments: SegAgg[];
+  };
+  const dealMap = new Map<number, DealAgg>();
+  for (const r of rows) {
+    const dealOrder = Number(r[6] ?? -1);
+    if (!Number.isFinite(dealOrder) || dealOrder < 0) continue;
+    if (!dealMap.has(dealOrder)) {
+      dealMap.set(dealOrder, {
+        name: String(r[0] ?? "").trim(),
+        provisional: String(r[1] ?? "").toLowerCase() === "true",
+        acres: Number(r[2] ?? 0),
+        price: Number(r[3] ?? 0),
+        depositLabel: String(r[4] ?? ""),
+        depositNote: (String(r[5] ?? "").trim() || null),
+        depositIsRate: String(r[21] ?? "").toLowerCase() === "true",
+        segments: [],
+      });
+    }
+    const phase = String(r[8] ?? "").trim();
+    if (phase === "contingency" || phase === "expectedClosing" || phase === "extension" || phase === "rolling") {
+      const start = String(r[9] ?? "").trim();
+      const end = String(r[10] ?? "").trim();
+      if (start && end) {
+        const milestoneDate = String(r[11] ?? "").trim() || null;
+        const seg: SegAgg = {
+          order: Number(r[7] ?? 0),
+          phase: phase as Phase,
+          start, end, milestoneDate,
+        };
+        if (phase === "rolling") {
+          const closingsRaw = String(r[19] ?? "").trim();
+          if (closingsRaw) {
+            try {
+              const parsed = JSON.parse(closingsRaw);
+              if (Array.isArray(parsed)) {
+                seg.closings = parsed
+                  .filter((c): c is { date: string; amount: number } =>
+                    !!c && typeof c === "object" && typeof (c as { date?: unknown }).date === "string" &&
+                    Number.isFinite(Number((c as { amount?: unknown }).amount)),
+                  )
+                  .map((c) => ({ date: c.date, amount: Number(c.amount) }));
+              }
+            } catch { /* leave undefined on parse failure */ }
+          }
+          const note = String(r[20] ?? "").trim();
+          if (note) seg.note = note;
+        }
+        dealMap.get(dealOrder)!.segments.push(seg);
+      }
+    }
+  }
+  const deals = Array.from(dealMap.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([, d]) => ({
+      name: d.name,
+      provisional: d.provisional,
+      acres: d.acres,
+      price: d.price,
+      depositLabel: d.depositLabel,
+      depositNote: d.depositNote,
+      depositIsRate: d.depositIsRate,
+      segments: d.segments
+        .sort((a, b) => a.order - b.order)
+        .map(({ phase, start, end, milestoneDate, closings, note }) => ({
+          phase, start, end, milestoneDate,
+          ...(closings ? { closings } : {}),
+          ...(note ? { note } : {}),
+        })),
+    }));
+
+  // Totals — `price` is the full acquisition amount (pre-summed for rolling
+  // deals on write). Closings are display-only from here.
+  const totals = deals.reduce(
+    (acc, d) => ({ acres: acc.acres + d.acres, price: acc.price + d.price }),
+    { acres: 0, price: 0 },
+  );
+
+  return {
+    title,
+    timelineStart,
+    timelineEnd,
+    deals,
+    totals,
+    totalsFromImage,
+    footnote,
     warnings: [],
   };
 }
