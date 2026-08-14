@@ -1207,6 +1207,186 @@ function fmtMDCompact(iso: string | null): string {
   return `${mo}/${d}`;
 }
 
+// ══════════════════════════════════════════════
+// TOTAL CASH POSITION TAB
+// ══════════════════════════════════════════════
+// Two-slice pie of the whole balance:
+//   Investment — the risk positions in the J.P. Morgan portfolio, ex-Treasury
+//                (IBIT/MSBT + MSTR, latest snapshot's market values)
+//   Total Cash — Treasury Ladder + Operating Cash (F11 of the
+//                "Operating Account Cash Position" published tab)
+// Data is fetched from endpoints Projected Spend already uses — no new plumbing.
+
+function TotalCashPositionTab() {
+  const [ibitValue, setIbitValue] = useState(0);
+  const [mstrValue, setMstrValue] = useState(0);
+  const [treasuryValue, setTreasuryValue] = useState(0);
+  const [operatingCash, setOperatingCash] = useState(0);
+  const [latestDate, setLatestDate] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const [snapsRes, opRes] = await Promise.all([
+          fetch("/api/portfolio/snapshots", { cache: "no-store" }),
+          fetch(OPERATING_CASH_CSV_URL, { cache: "no-store" }),
+        ]);
+        if (!snapsRes.ok) {
+          const body = await snapsRes.json().catch(() => ({}));
+          throw new Error(body.error || `Portfolio snapshots: HTTP ${snapsRes.status}`);
+        }
+        const snapData = await snapsRes.json();
+        const snaps = (snapData.snapshots ?? []) as { statementDate: string; ticker: string; marketValue: number }[];
+        const dates = Array.from(new Set(snaps.map((s) => s.statementDate))).sort();
+        const latest = dates[dates.length - 1] || "";
+        setLatestDate(latest);
+        const latestSnaps = snaps.filter((s) => s.statementDate === latest);
+        const sumTickers = (...ts: string[]) => {
+          const set = new Set(ts.map((t) => t.toUpperCase()));
+          return latestSnaps
+            .filter((s) => set.has(s.ticker.toUpperCase()))
+            .reduce((sum, s) => sum + s.marketValue, 0);
+        };
+        setIbitValue(sumTickers("IBIT", "MSBT"));
+        setMstrValue(sumTickers("MSTR"));
+        setTreasuryValue(sumTickers("TREASURY"));
+
+        if (opRes.ok) {
+          const csv = await opRes.text();
+          const opRows = parseCSV(csv);
+          const rawF11 = opRows[10]?.[5] ?? "";
+          setOperatingCash(toNumWithSuffix(rawF11));
+        }
+        setErr(null);
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const investmentTotal = ibitValue + mstrValue;
+  const cashTotal = treasuryValue + operatingCash;
+  const grandTotal = investmentTotal + cashTotal;
+  const pctInvestment = grandTotal > 0 ? (investmentTotal / grandTotal) * 100 : 0;
+  const pctCash = grandTotal > 0 ? (cashTotal / grandTotal) * 100 : 0;
+
+  const pieData = [
+    { name: "Investment", value: investmentTotal, color: C.blue },
+    { name: "Total Cash", value: cashTotal, color: C.green },
+  ];
+
+  return (
+    <>
+      <Section>Total Cash Position</Section>
+
+      {loading && <div style={{ color: C.muted, marginTop: 12 }}>Loading…</div>}
+      {err && <div style={{ color: C.red, marginTop: 12 }}>{err}</div>}
+
+      {!loading && !err && grandTotal === 0 && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "32px 28px", color: C.muted, fontSize: 16 }}>
+          No portfolio or operating-cash data available. Upload a J.P. Morgan statement on the Investment Portfolio tab and populate F11 on the Operating Account Cash Position sheet.
+        </div>
+      )}
+
+      {!loading && !err && grandTotal > 0 && (
+        <>
+          {/* KPI tiles */}
+          <div style={{ display: "flex", gap: 14, marginBottom: 18, flexWrap: "wrap" }}>
+            <KPI label="Total" value={fmt(grandTotal)} sub={latestDate ? `As of ${latestDate}` : undefined} />
+            <KPI label="Investment" value={fmt(investmentTotal)} color={C.blue} sub={`${pctInvestment.toFixed(1)}% of total`} />
+            <KPI label="Total Cash" value={fmt(cashTotal)} color={C.green} sub={`${pctCash.toFixed(1)}% of total`} />
+          </div>
+
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+            {/* Pie chart card */}
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, flex: "1 1 380px", minWidth: 380, height: "min(56vh, 640px)", minHeight: 420 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%" cy="50%"
+                    innerRadius="46%" outerRadius="78%"
+                    paddingAngle={3}
+                    dataKey="value"
+                    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+                    label={(props: any) => {
+                      const { cx, cy, midAngle, outerRadius, name, percent, fill } = props;
+                      const RADIAN = Math.PI / 180;
+                      const r = outerRadius + 34;
+                      const x = cx + r * Math.cos(-midAngle * RADIAN);
+                      const y = cy + r * Math.sin(-midAngle * RADIAN);
+                      return (
+                        <text x={x} y={y} fill={fill} fontSize={26} fontWeight={700}
+                              textAnchor={x > cx ? "start" : "end"} dominantBaseline="central">
+                          {`${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                        </text>
+                      );
+                    }}
+                    labelLine={{ stroke: C.muted }}
+                  >
+                    {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                  </Pie>
+                  <Tooltip
+                    formatter={(v) => fmtFull(Number(v))}
+                    contentStyle={{ background: "#1a1f2e", border: "1px solid #2a3040", borderRadius: 8, padding: "10px 14px" }}
+                    labelStyle={{ color: C.text, fontSize: 16, fontWeight: 700, marginBottom: 4 }}
+                    itemStyle={{ fontSize: 14, fontFamily: "monospace", padding: "2px 0" }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Breakdown card */}
+            <div style={{ flex: "1 1 340px", minWidth: 320, display: "flex", flexDirection: "column", gap: 14 }}>
+              {[
+                {
+                  label: "Investment",
+                  color: C.blue,
+                  total: investmentTotal,
+                  parts: [
+                    { name: "Bitcoin ETF", value: ibitValue },
+                    { name: "MSTR", value: mstrValue },
+                  ],
+                },
+                {
+                  label: "Total Cash",
+                  color: C.green,
+                  total: cashTotal,
+                  parts: [
+                    { name: "Treasury Ladder", value: treasuryValue },
+                    { name: "Operating Cash", value: operatingCash },
+                  ],
+                },
+              ].map((bucket, i) => (
+                <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: `1px solid ${bucket.color}`, borderRadius: 12, padding: "20px 24px", boxShadow: `inset 0 1px 0 ${bucket.color}33` }}>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ width: 14, height: 14, background: bucket.color, borderRadius: 3 }} />
+                      <span style={{ fontSize: 20, fontWeight: 700, color: C.text }}>{bucket.label}</span>
+                    </div>
+                    <span style={{ fontSize: 26, fontFamily: "monospace", fontWeight: 700, color: C.text }}>{fmt(bucket.total)}</span>
+                  </div>
+                  {bucket.parts.map((p, j) => (
+                    <div key={j} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderTop: j === 0 ? undefined : `1px solid ${C.border}` }}>
+                      <span style={{ color: C.muted, fontSize: 15 }}>{p.name}</span>
+                      <span style={{ color: C.text, fontFamily: "monospace", fontWeight: 600, fontSize: 15 }}>{fmt(p.value)}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 function AcquisitionCalendarTab() {
   const [calendar, setCalendar] = useState<AcqCalendarData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -2412,6 +2592,7 @@ export default function Dashboard() {
 
   const tabs = [
     { id: "overview", label: "Overview" },
+    { id: "cashposition", label: "Total Cash Position" },
     { id: "costs", label: "Cost Breakdown" },
     { id: "variance", label: "ITD vs Plan" },
     { id: "headcount", label: "Headcount" },
@@ -3117,6 +3298,8 @@ export default function Dashboard() {
       {tab === "cashreq" && <CashRequirementsTab />}
 
       {tab === "acqcal" && <AcquisitionCalendarTab />}
+
+      {tab === "cashposition" && <TotalCashPositionTab />}
 
       {tab === "projspend" && <ProjectedSpendTab months={months} />}
 
