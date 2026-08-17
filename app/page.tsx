@@ -3875,7 +3875,7 @@ export default function Dashboard() {
                     );
                   }
                   const monthTotal = txns.reduce((s, t) => s + t.amount, 0);
-                  const NOT_UNDER_CONTRACT = ["tito", "texas aggregates", "sonny"];
+                  const NOT_UNDER_CONTRACT = ["tito", "sonny"];
                   const isNotUnderContract = (deal: string) =>
                     NOT_UNDER_CONTRACT.some((needle) => deal.toLowerCase().includes(needle));
                   const anyNotUnderContract = txns.some((t) => isNotUnderContract(t.deal));
